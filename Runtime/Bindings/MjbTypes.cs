@@ -37,6 +37,12 @@ namespace Mujoco.Mjb
         public int nbody;
         public int njnt;
         public int ngeom;
+        public int nsite;
+        public int nmocap;
+        public int ntendon;
+        public int nsensor;
+        public int nsensordata;
+        public int neq;
     }
 
     /// <summary>

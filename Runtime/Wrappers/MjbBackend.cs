@@ -58,6 +58,15 @@ namespace Mujoco.Mjb
             return new MjbModel(h);
         }
 
+        public MjbModel LoadModelFromString(string xmlString)
+        {
+            ThrowIfDisposed();
+            IntPtr h = MjbNativeMethods.mjb_load_model_from_string(Handle, xmlString);
+            if (h == IntPtr.Zero)
+                throw new InvalidOperationException("Failed to load model from XML string");
+            return new MjbModel(h);
+        }
+
         private void ThrowIfDisposed()
         {
             if (_disposed) throw new ObjectDisposedException(nameof(MjbBackend));

@@ -46,6 +46,9 @@ namespace Mujoco.Mjb
         public static extern IntPtr mjb_load_model_filtered(IntPtr backend, string xmlPath, int footContactsOnly);
 
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr mjb_load_model_from_string(IntPtr backend, string xmlString);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
         public static extern void mjb_free_model(IntPtr model);
 
         // ── Model accessors ─────────────────────────────────────────────
@@ -64,6 +67,48 @@ namespace Mujoco.Mjb
 
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
         public static extern int mjb_name2id(IntPtr model, int objType, string name);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr mjb_id2name(IntPtr model, int objType, int id);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int mjb_model_jnt_qposadr(IntPtr model, int jntId);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int mjb_model_jnt_dofadr(IntPtr model, int jntId);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int mjb_model_jnt_type(IntPtr model, int jntId);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int mjb_model_nconmax(IntPtr model);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int mjb_model_geom_type(IntPtr model, int geomId);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int mjb_model_sensor_adr(IntPtr model, int sensorId);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int mjb_model_body_mocapid(IntPtr model, int bodyId);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float mjb_model_tendon_width(IntPtr model, int tendonId);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int mjb_model_hfield_adr(IntPtr model, int hfieldId);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float* mjb_model_eq_data(IntPtr model, int* nOut);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float* mjb_model_hfield_data(IntPtr model, int* nOut);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float* mjb_model_geom_pos(IntPtr model, int* nOut);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float* mjb_model_geom_quat(IntPtr model, int* nOut);
 
         // ── Data lifecycle ──────────────────────────────────────────────
 
@@ -92,6 +137,9 @@ namespace Mujoco.Mjb
 
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
         public static extern void mjb_kinematics(IntPtr model, IntPtr data);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void mjb_rne_post_constraint(IntPtr model, IntPtr data);
 
         // ── State access (always float*) ────────────────────────────────
 
@@ -136,6 +184,63 @@ namespace Mujoco.Mjb
 
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
         public static extern float* mjb_get_cfrc_ext(IntPtr data, int* nOut);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float* mjb_get_geom_xpos(IntPtr data, int* nOut);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float* mjb_get_geom_xmat(IntPtr data, int* nOut);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float* mjb_get_sensordata(IntPtr data, int* nOut);
+
+        // Additional data getters for component binding
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float* mjb_get_xaxis(IntPtr data, int* nOut);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float* mjb_get_site_xpos(IntPtr data, int* nOut);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float* mjb_get_site_xmat(IntPtr data, int* nOut);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float* mjb_get_actuator_length(IntPtr data, int* nOut);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float* mjb_get_actuator_velocity(IntPtr data, int* nOut);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float* mjb_get_actuator_force(IntPtr data, int* nOut);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float* mjb_get_mocap_pos(IntPtr data, int* nOut);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float* mjb_get_mocap_quat(IntPtr data, int* nOut);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float* mjb_get_ten_length(IntPtr data, int* nOut);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float* mjb_get_wrap_xpos(IntPtr data, int* nOut);
+
+        // Int data getters (tendon wrapping)
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int* mjb_get_ten_wrapadr(IntPtr data, int* nOut);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int* mjb_get_ten_wrapnum(IntPtr data, int* nOut);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int* mjb_get_wrap_obj(IntPtr data, int* nOut);
+
+        // Mocap setters
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void mjb_set_mocap_pos(IntPtr data, float* pos, int n);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void mjb_set_mocap_quat(IntPtr data, float* quat, int n);
 
         // ── Batched simulation ──────────────────────────────────────────
 

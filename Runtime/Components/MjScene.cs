@@ -23,8 +23,11 @@ using System.Text;
 using System.Xml;
 using UnityEngine;
 using UnityEngine.Profiling;
+using Mujoco.Mjb;
 
 namespace Mujoco {
+
+public enum PhysicsBackendType { CPU, GPU }
 
 public class PhysicsRuntimeException : Exception {
   public PhysicsRuntimeException(string message) : base(message) {}
@@ -34,6 +37,28 @@ public class MjScene : MonoBehaviour {
 
   public unsafe MujocoLib.mjModel_* Model = null;
   public unsafe MujocoLib.mjData_* Data = null;
+
+  [Header("Physics Backend")]
+  [Tooltip("CPU: MuJoCo C (double, CPU). GPU: MuJoCo-MLX (float32, Metal GPU). " +
+           "GPU does physics on Metal, then syncs state back to CPU for rendering.")]
+  public PhysicsBackendType physicsBackend = PhysicsBackendType.CPU;
+
+  private IMjPhysicsBackend _gpuBackend;
+  private MjCpuBackend _cpuBackend; // non-owning wrapper around Model/Data for component access
+  private float[] _gpuCtrlBuf;
+
+  /// <summary>
+  /// The active GPU physics backend, or null if CPU mode.
+  /// For GPU, this is the MjGpuBackend driving physics.
+  /// </summary>
+  public IMjPhysicsBackend GpuBackend => _gpuBackend;
+
+  /// <summary>
+  /// Non-owning CPU backend wrapping Model/Data. Always available after CreateScene.
+  /// Components use this for all accessor needs (name lookups, data reads).
+  /// Even in GPU mode, components render from CPU Data (synced after GPU step).
+  /// </summary>
+  public IMjPhysicsBackend CpuPhysicsBackend => _cpuBackend;
 
   // Public and global access to the active MjSceneGenerationContext.
   // Throws an exception if accessed when the scene is not being generated.
@@ -120,7 +145,9 @@ public class MjScene : MonoBehaviour {
   public unsafe void ResetData() {
     if (Model == null || Data == null) return;
     MujocoLib.mj_resetData(Model, Data);
+    _gpuBackend?.ResetData();
     MujocoLib.mj_forward(Model, Data);
+    _gpuBackend?.Forward();
     SyncUnityToMjState();
     postInitEvent?.Invoke(this, new MjStepArgs(Model, Data));
   }
@@ -212,9 +239,26 @@ public class MjScene : MonoBehaviour {
       throw new NullReferenceException("Model loaded but mj_makeData failed.");
     }
 
+    // Create non-owning CPU backend wrapper for component accessor access.
+    _cpuBackend = new MjCpuBackend(Model, Data);
+
     // Bind the components to their Mujoco counterparts.
     foreach (var component in components) {
       component.BindToRuntime(Model, Data);
+    }
+
+    // If GPU backend selected, create MjGpuBackend from the same MJCF.
+    // CPU Model/Data remain for component binding and rendering sync.
+    if (physicsBackend == PhysicsBackendType.GPU) {
+      try {
+        _gpuBackend = new MjGpuBackend(mjcf.OuterXml, fromString: true);
+        _gpuCtrlBuf = new float[(int)Model->nu];
+        Debug.Log($"MjScene: GPU backend (MuJoCo-MLX) active. nq={_gpuBackend.Nq}, nu={_gpuBackend.Nu}");
+      } catch (Exception e) {
+        Debug.LogError($"MjScene: GPU backend creation failed, falling back to CPU: {e.Message}");
+        _gpuBackend = null;
+        _gpuCtrlBuf = null;
+      }
     }
   }
 
@@ -336,6 +380,11 @@ public class MjScene : MonoBehaviour {
   // Destroys the Mujoco scene.
   public unsafe void DestroyScene() {
     preDestroyEvent?.Invoke(this, new MjStepArgs(Model, Data));
+    _gpuBackend?.Dispose();
+    _gpuBackend = null;
+    _gpuCtrlBuf = null;
+    _cpuBackend?.Dispose();
+    _cpuBackend = null;
     if (Model != null) {
       MujocoLib.mj_deleteModel(Model);
       Model = null;
@@ -353,16 +402,32 @@ public class MjScene : MonoBehaviour {
     }
     Profiler.BeginSample("MjStep");
     Profiler.BeginSample("MjStep.mj_step");
-    if (ctrlCallback != null){
+
+    if (_gpuBackend != null) {
+      // GPU path: actuators write to Data->ctrl, we forward that to GPU
+      int nu = (int)Model->nu;
+      for (int i = 0; i < nu; i++) _gpuCtrlBuf[i] = (float)Data->ctrl[i];
+      _gpuBackend.SetCtrl(_gpuCtrlBuf);
+      _gpuBackend.Step();
+
+      // Copy state back to CPU Data for component rendering
+      var qpos = _gpuBackend.GetQpos();
+      var qvel = _gpuBackend.GetQvel();
+      int nq = qpos.Length, nv = qvel.Length;
+      for (int i = 0; i < nq; i++) Data->qpos[i] = qpos[i];
+      for (int i = 0; i < nv; i++) Data->qvel[i] = qvel[i];
+      MujocoLib.mj_forward(Model, Data);
+    } else if (ctrlCallback != null) {
       MujocoLib.mj_step1(Model, Data);
       ctrlCallback?.Invoke(this, new MjStepArgs(Model, Data));
       MujocoLib.mj_step2(Model, Data);
-    }
-    else {
+    } else {
       MujocoLib.mj_step(Model, Data);
     }
     Profiler.EndSample(); // MjStep.mj_step
-    CheckForPhysicsException();
+
+    if (_gpuBackend == null)
+      CheckForPhysicsException();
 
     Profiler.BeginSample("MjStep.OnSyncState");
     SyncUnityToMjState();

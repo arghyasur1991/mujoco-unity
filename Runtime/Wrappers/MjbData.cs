@@ -107,6 +107,12 @@ namespace Mujoco.Mjb
             MjbNativeMethods.mjb_reset_data(_model.Handle, Handle);
         }
 
+        public void RnePostConstraint()
+        {
+            ThrowIfDisposed();
+            MjbNativeMethods.mjb_rne_post_constraint(_model.Handle, Handle);
+        }
+
         // ── State setters ───────────────────────────────────────────
 
         public unsafe void SetQpos(float[] qpos)
@@ -218,6 +224,154 @@ namespace Mujoco.Mjb
             int n;
             float* ptr = MjbNativeMethods.mjb_get_cfrc_ext(Handle, &n);
             return new MjbFloatSpan(ptr, n);
+        }
+
+        public unsafe MjbFloatSpan GetGeomXpos()
+        {
+            ThrowIfDisposed();
+            int n;
+            float* ptr = MjbNativeMethods.mjb_get_geom_xpos(Handle, &n);
+            return new MjbFloatSpan(ptr, n);
+        }
+
+        public unsafe MjbFloatSpan GetGeomXmat()
+        {
+            ThrowIfDisposed();
+            int n;
+            float* ptr = MjbNativeMethods.mjb_get_geom_xmat(Handle, &n);
+            return new MjbFloatSpan(ptr, n);
+        }
+
+        public unsafe MjbFloatSpan GetSensordata()
+        {
+            ThrowIfDisposed();
+            int n;
+            float* ptr = MjbNativeMethods.mjb_get_sensordata(Handle, &n);
+            return new MjbFloatSpan(ptr, n);
+        }
+
+        // ── Additional data getters for component binding ────────────
+
+        public unsafe MjbFloatSpan GetXaxis()
+        {
+            ThrowIfDisposed();
+            int n;
+            float* ptr = MjbNativeMethods.mjb_get_xaxis(Handle, &n);
+            return new MjbFloatSpan(ptr, n);
+        }
+
+        public unsafe MjbFloatSpan GetSiteXpos()
+        {
+            ThrowIfDisposed();
+            int n;
+            float* ptr = MjbNativeMethods.mjb_get_site_xpos(Handle, &n);
+            return new MjbFloatSpan(ptr, n);
+        }
+
+        public unsafe MjbFloatSpan GetSiteXmat()
+        {
+            ThrowIfDisposed();
+            int n;
+            float* ptr = MjbNativeMethods.mjb_get_site_xmat(Handle, &n);
+            return new MjbFloatSpan(ptr, n);
+        }
+
+        public unsafe MjbFloatSpan GetActuatorLength()
+        {
+            ThrowIfDisposed();
+            int n;
+            float* ptr = MjbNativeMethods.mjb_get_actuator_length(Handle, &n);
+            return new MjbFloatSpan(ptr, n);
+        }
+
+        public unsafe MjbFloatSpan GetActuatorVelocity()
+        {
+            ThrowIfDisposed();
+            int n;
+            float* ptr = MjbNativeMethods.mjb_get_actuator_velocity(Handle, &n);
+            return new MjbFloatSpan(ptr, n);
+        }
+
+        public unsafe MjbFloatSpan GetActuatorForce()
+        {
+            ThrowIfDisposed();
+            int n;
+            float* ptr = MjbNativeMethods.mjb_get_actuator_force(Handle, &n);
+            return new MjbFloatSpan(ptr, n);
+        }
+
+        public unsafe MjbFloatSpan GetMocapPos()
+        {
+            ThrowIfDisposed();
+            int n;
+            float* ptr = MjbNativeMethods.mjb_get_mocap_pos(Handle, &n);
+            return new MjbFloatSpan(ptr, n);
+        }
+
+        public unsafe MjbFloatSpan GetMocapQuat()
+        {
+            ThrowIfDisposed();
+            int n;
+            float* ptr = MjbNativeMethods.mjb_get_mocap_quat(Handle, &n);
+            return new MjbFloatSpan(ptr, n);
+        }
+
+        public unsafe MjbFloatSpan GetTenLength()
+        {
+            ThrowIfDisposed();
+            int n;
+            float* ptr = MjbNativeMethods.mjb_get_ten_length(Handle, &n);
+            return new MjbFloatSpan(ptr, n);
+        }
+
+        public unsafe MjbFloatSpan GetWrapXpos()
+        {
+            ThrowIfDisposed();
+            int n;
+            float* ptr = MjbNativeMethods.mjb_get_wrap_xpos(Handle, &n);
+            return new MjbFloatSpan(ptr, n);
+        }
+
+        // Int data getters return raw pointers (tendon wrapping)
+
+        public unsafe (int* data, int length) GetTenWrapadr()
+        {
+            ThrowIfDisposed();
+            int n;
+            int* ptr = MjbNativeMethods.mjb_get_ten_wrapadr(Handle, &n);
+            return (ptr, n);
+        }
+
+        public unsafe (int* data, int length) GetTenWrapnum()
+        {
+            ThrowIfDisposed();
+            int n;
+            int* ptr = MjbNativeMethods.mjb_get_ten_wrapnum(Handle, &n);
+            return (ptr, n);
+        }
+
+        public unsafe (int* data, int length) GetWrapObj()
+        {
+            ThrowIfDisposed();
+            int n;
+            int* ptr = MjbNativeMethods.mjb_get_wrap_obj(Handle, &n);
+            return (ptr, n);
+        }
+
+        // ── Mocap setters ────────────────────────────────────────────
+
+        public unsafe void SetMocapPos(float[] pos)
+        {
+            ThrowIfDisposed();
+            fixed (float* p = pos)
+                MjbNativeMethods.mjb_set_mocap_pos(Handle, p, pos.Length);
+        }
+
+        public unsafe void SetMocapQuat(float[] quat)
+        {
+            ThrowIfDisposed();
+            fixed (float* p = quat)
+                MjbNativeMethods.mjb_set_mocap_quat(Handle, p, quat.Length);
         }
 
         // ── Differentiable simulation ───────────────────────────────

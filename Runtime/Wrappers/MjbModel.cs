@@ -13,6 +13,7 @@
 // limitations under the License.
 
 using System;
+using System.Runtime.InteropServices;
 
 namespace Mujoco.Mjb
 {
@@ -63,6 +64,114 @@ namespace Mujoco.Mjb
         {
             ThrowIfDisposed();
             return MjbNativeMethods.mjb_name2id(Handle, objType, name);
+        }
+
+        public string Id2Name(int objType, int id)
+        {
+            ThrowIfDisposed();
+            IntPtr ptr = MjbNativeMethods.mjb_id2name(Handle, objType, id);
+            return ptr == IntPtr.Zero ? null : Marshal.PtrToStringAnsi(ptr);
+        }
+
+        public int JntQposAdr(int jntId)
+        {
+            ThrowIfDisposed();
+            return MjbNativeMethods.mjb_model_jnt_qposadr(Handle, jntId);
+        }
+
+        public int JntDofAdr(int jntId)
+        {
+            ThrowIfDisposed();
+            return MjbNativeMethods.mjb_model_jnt_dofadr(Handle, jntId);
+        }
+
+        public int JntType(int jntId)
+        {
+            ThrowIfDisposed();
+            return MjbNativeMethods.mjb_model_jnt_type(Handle, jntId);
+        }
+
+        public int Nconmax
+        {
+            get
+            {
+                ThrowIfDisposed();
+                return MjbNativeMethods.mjb_model_nconmax(Handle);
+            }
+        }
+
+        public int GeomType(int geomId)
+        {
+            ThrowIfDisposed();
+            return MjbNativeMethods.mjb_model_geom_type(Handle, geomId);
+        }
+
+        public int SensorAdr(int sensorId)
+        {
+            ThrowIfDisposed();
+            return MjbNativeMethods.mjb_model_sensor_adr(Handle, sensorId);
+        }
+
+        public int BodyMocapId(int bodyId)
+        {
+            ThrowIfDisposed();
+            return MjbNativeMethods.mjb_model_body_mocapid(Handle, bodyId);
+        }
+
+        public float TendonWidth(int tendonId)
+        {
+            ThrowIfDisposed();
+            return MjbNativeMethods.mjb_model_tendon_width(Handle, tendonId);
+        }
+
+        public int HfieldAdr(int hfieldId)
+        {
+            ThrowIfDisposed();
+            return MjbNativeMethods.mjb_model_hfield_adr(Handle, hfieldId);
+        }
+
+        public unsafe MjbFloatSpan EqData
+        {
+            get
+            {
+                ThrowIfDisposed();
+                int n;
+                float* ptr = MjbNativeMethods.mjb_model_eq_data(Handle, &n);
+                return new MjbFloatSpan(ptr, n);
+            }
+        }
+
+        public unsafe MjbFloatSpan HfieldData
+        {
+            get
+            {
+                ThrowIfDisposed();
+                int n;
+                float* ptr = MjbNativeMethods.mjb_model_hfield_data(Handle, &n);
+                return new MjbFloatSpan(ptr, n);
+            }
+        }
+
+        public unsafe MjbFloatSpan GeomPos
+        {
+            get
+            {
+                ThrowIfDisposed();
+                int n;
+                float* ptr = MjbNativeMethods.mjb_model_geom_pos(Handle, &n);
+                return new MjbFloatSpan(ptr, n);
+            }
+        }
+
+        public unsafe MjbFloatSpan GeomQuat
+        {
+            get
+            {
+                ThrowIfDisposed();
+                int n;
+                float* ptr = MjbNativeMethods.mjb_model_geom_quat(Handle, &n);
+                return new MjbFloatSpan(ptr, n);
+            }
         }
 
         public MjbData MakeData()
