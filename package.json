@@ -1,0 +1,14 @@
+{
+  "name": "com.mobyr.mujoco",
+  "displayName": "MuJoCo MLX",
+  "version": "1.0.0",
+  "description": "GPU-accelerated MuJoCo for Unity. Drop-in superset of org.mujoco with Apple Metal/MLX backend via libmjb.",
+  "dependencies": {},
+  "author": {
+    "name": "Mobyr",
+    "url": "https://github.com/arghyasur1991/mujoco-unity"
+  },
+  "license": "Apache-2.0",
+  "licensesUrl": "https://github.com/arghyasur1991/mujoco-unity/blob/main/LICENSE",
+  "hideInEditor": false
+}

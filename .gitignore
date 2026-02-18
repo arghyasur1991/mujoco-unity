@@ -1,0 +1,11 @@
+# Native plugin binaries (shipped via build or release artifacts, not committed)
+Plugins/macOS/arm64/*.dylib
+Plugins/Windows/x86_64/*.dll
+Plugins/Linux/x86_64/*.so
+
+# Unity meta files for plugins are committed, dylibs are not
+!Plugins/**/*.meta
+
+# OS files
+.DS_Store
+Thumbs.db
