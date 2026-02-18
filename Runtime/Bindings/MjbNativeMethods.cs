@@ -40,10 +40,10 @@ namespace Mujoco.Mjb
         // ── Model I/O ───────────────────────────────────────────────────
 
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern IntPtr mjb_load_model(IntPtr backend, [MarshalAs(UnmanagedType.LPUTF8Str)] string xmlPath);
+        public static extern IntPtr mjb_load_model(IntPtr backend, string xmlPath);
 
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern IntPtr mjb_load_model_filtered(IntPtr backend, [MarshalAs(UnmanagedType.LPUTF8Str)] string xmlPath, int footContactsOnly);
+        public static extern IntPtr mjb_load_model_filtered(IntPtr backend, string xmlPath, int footContactsOnly);
 
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
         public static extern void mjb_free_model(IntPtr model);
@@ -63,7 +63,7 @@ namespace Mujoco.Mjb
         public static extern float mjb_model_body_mass(IntPtr model, int bodyId);
 
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
-        public static extern int mjb_name2id(IntPtr model, int objType, [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
+        public static extern int mjb_name2id(IntPtr model, int objType, string name);
 
         // ── Data lifecycle ──────────────────────────────────────────────
 

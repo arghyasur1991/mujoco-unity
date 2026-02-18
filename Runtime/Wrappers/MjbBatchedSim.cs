@@ -54,68 +54,68 @@ namespace Mujoco.Mjb
 
         // ── Batched state getters (float[numEnvs * dim]) ────────────
 
-        public unsafe ReadOnlySpan<float> GetQpos()
+        public unsafe MjbFloatSpan GetQpos()
         {
             ThrowIfDisposed();
             int n;
             float* ptr = MjbNativeMethods.mjb_batched_get_qpos(Handle, &n);
-            return new ReadOnlySpan<float>(ptr, n);
+            return new MjbFloatSpan(ptr, n);
         }
 
-        public unsafe ReadOnlySpan<float> GetQvel()
+        public unsafe MjbFloatSpan GetQvel()
         {
             ThrowIfDisposed();
             int n;
             float* ptr = MjbNativeMethods.mjb_batched_get_qvel(Handle, &n);
-            return new ReadOnlySpan<float>(ptr, n);
+            return new MjbFloatSpan(ptr, n);
         }
 
-        public unsafe ReadOnlySpan<float> GetXpos()
+        public unsafe MjbFloatSpan GetXpos()
         {
             ThrowIfDisposed();
             int n;
             float* ptr = MjbNativeMethods.mjb_batched_get_xpos(Handle, &n);
-            return new ReadOnlySpan<float>(ptr, n);
+            return new MjbFloatSpan(ptr, n);
         }
 
-        public unsafe ReadOnlySpan<float> GetSubtreeCom()
+        public unsafe MjbFloatSpan GetSubtreeCom()
         {
             ThrowIfDisposed();
             int n;
             float* ptr = MjbNativeMethods.mjb_batched_get_subtree_com(Handle, &n);
-            return new ReadOnlySpan<float>(ptr, n);
+            return new MjbFloatSpan(ptr, n);
         }
 
-        public unsafe ReadOnlySpan<float> GetCinert()
+        public unsafe MjbFloatSpan GetCinert()
         {
             ThrowIfDisposed();
             int n;
             float* ptr = MjbNativeMethods.mjb_batched_get_cinert(Handle, &n);
-            return new ReadOnlySpan<float>(ptr, n);
+            return new MjbFloatSpan(ptr, n);
         }
 
-        public unsafe ReadOnlySpan<float> GetCvel()
+        public unsafe MjbFloatSpan GetCvel()
         {
             ThrowIfDisposed();
             int n;
             float* ptr = MjbNativeMethods.mjb_batched_get_cvel(Handle, &n);
-            return new ReadOnlySpan<float>(ptr, n);
+            return new MjbFloatSpan(ptr, n);
         }
 
-        public unsafe ReadOnlySpan<float> GetQfrcActuator()
+        public unsafe MjbFloatSpan GetQfrcActuator()
         {
             ThrowIfDisposed();
             int n;
             float* ptr = MjbNativeMethods.mjb_batched_get_qfrc_actuator(Handle, &n);
-            return new ReadOnlySpan<float>(ptr, n);
+            return new MjbFloatSpan(ptr, n);
         }
 
-        public unsafe ReadOnlySpan<float> GetCfrcExt()
+        public unsafe MjbFloatSpan GetCfrcExt()
         {
             ThrowIfDisposed();
             int n;
             float* ptr = MjbNativeMethods.mjb_batched_get_cfrc_ext(Handle, &n);
-            return new ReadOnlySpan<float>(ptr, n);
+            return new MjbFloatSpan(ptr, n);
         }
 
         private void ThrowIfDisposed()
