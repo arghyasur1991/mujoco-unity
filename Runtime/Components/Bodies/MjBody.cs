@@ -15,6 +15,7 @@
 using System;
 using System.Xml;
 using UnityEngine;
+using Mujoco.Mjb;
 
 namespace Mujoco {
 
@@ -40,11 +41,9 @@ namespace Mujoco {
       return mjcf;
     }
 
-    public override unsafe void OnSyncState(MujocoLib.mjData_* data) {
-      transform.position = MjEngineTool.UnityVector3(
-          MjEngineTool.MjVector3AtEntry(data->xpos, MujocoId));
-      transform.rotation = MjEngineTool.UnityQuaternion(
-          MjEngineTool.MjQuaternionAtEntry(data->xquat, MujocoId));
+    public override void OnSyncState(MjbData data) {
+      transform.position = MjEngineTool.UnityVector3AtEntry(data.GetXpos(), MujocoId);
+      transform.rotation = MjEngineTool.UnityQuaternionAtEntry(data.GetXquat(), MujocoId);
     }
   }
 }

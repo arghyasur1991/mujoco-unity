@@ -15,6 +15,7 @@
 using System;
 using System.Xml;
 using UnityEngine;
+using Mujoco.Mjb;
 
 namespace Mujoco {
   public class MjMocapBody : MjBaseBody {
@@ -26,9 +27,9 @@ namespace Mujoco {
           mjcf.GetQuaternionAttribute("quat", defaultValue: MjEngineTool.MjQuaternionIdentity));
     }
 
-    protected override unsafe void OnBindToRuntime(MujocoLib.mjModel_* model, MujocoLib.mjData_* data) {
-      var bodyId = MujocoLib.mj_name2id(model, (int)ObjectType, MujocoName);
-      MujocoId = model->body_mocapid[bodyId];
+    protected override void OnBindToRuntime(MjbModel model, MjbData data) {
+      var bodyId = model.Name2Id((int)ObjectType, MujocoName);
+      MujocoId = model.BodyMocapId(bodyId);
     }
 
     protected override XmlElement OnGenerateMjcf(XmlDocument doc) {
@@ -38,11 +39,9 @@ namespace Mujoco {
       return mjcf;
     }
 
-    public override unsafe void OnSyncState(MujocoLib.mjData_* data) {
-      MjEngineTool.SetMjVector3(
-          MjEngineTool.MjVector3AtEntry(data->mocap_pos, MujocoId), transform.position);
-      MjEngineTool.SetMjQuaternion(
-          MjEngineTool.MjQuaternionAtEntry(data->mocap_quat, MujocoId), transform.rotation);
+    public override void OnSyncState(MjbData data) {
+      MjEngineTool.SetMjVector3AtEntry(data.GetMocapPos(), MujocoId, transform.position);
+      MjEngineTool.SetMjQuaternionAtEntry(data.GetMocapQuat(), MujocoId, transform.rotation);
     }
   }
 }

@@ -19,6 +19,6 @@ using UnityEngine;
 namespace Mujoco {
 
   public abstract class MjBaseBody : MjComponent {
-    public override MujocoLib.mjtObj ObjectType => MujocoLib.mjtObj.mjOBJ_BODY;
+    public override mjtObj ObjectType => mjtObj.mjOBJ_BODY;
   }
 }

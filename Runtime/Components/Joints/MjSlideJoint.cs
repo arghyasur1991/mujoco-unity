@@ -15,6 +15,7 @@
 using System;
 using System.Xml;
 using UnityEngine;
+using Mujoco.Mjb;
 
 namespace Mujoco {
 
@@ -35,23 +36,23 @@ namespace Mujoco {
     public MjJointSettings Settings = MjJointSettings.Default;
 
     // World space slide axis.
-    public unsafe Vector3 SlideAxis {
+    public Vector3 SlideAxis {
       get {
         if (MjScene.InstanceExists) {
-          return MjEngineTool.UnityVector3(MjScene.Instance.Data->xaxis + 3 * MujocoId);
+          return MjEngineTool.UnityVector3AtEntry(MjScene.Instance.Data.GetXaxis(), MujocoId);
         }
         return transform.rotation * Vector3.right;
       }
     }
 
-    protected override unsafe void OnBindToRuntime(MujocoLib.mjModel_* model, MujocoLib.mjData_* data) {
+    protected override void OnBindToRuntime(MjbModel model, MjbData data) {
       base.OnBindToRuntime(model, data);
-      data->qvel[DofAddress] = Velocity;
+      data.SetQvelAt(DofAddress, Velocity);
     }
 
-    public override unsafe void OnSyncState(MujocoLib.mjData_* data) {
-      Configuration = (float)data->qpos[QposAddress];
-      Velocity = (float)data->qvel[DofAddress];
+    public override void OnSyncState(MjbData data) {
+      Configuration = data.GetQpos()[QposAddress];
+      Velocity = data.GetQvel()[DofAddress];
     }
 
     protected override void OnParseMjcf(XmlElement mjcf) {

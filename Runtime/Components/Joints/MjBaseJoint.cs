@@ -15,11 +15,12 @@
 using System;
 using System.Xml;
 using UnityEngine;
+using Mujoco.Mjb;
 
 namespace Mujoco {
 
   public abstract class MjBaseJoint : MjComponent {
-    public override MujocoLib.mjtObj ObjectType => MujocoLib.mjtObj.mjOBJ_JOINT;
+    public override mjtObj ObjectType => mjtObj.mjOBJ_JOINT;
 
     public int QposAddress { get; private set; } = -1;
     public int DofAddress { get; private set; } = -1;
@@ -44,9 +45,9 @@ namespace Mujoco {
       }
     }
 
-    protected override unsafe void OnBindToRuntime(MujocoLib.mjModel_* model, MujocoLib.mjData_* data) {
-      QposAddress = model->jnt_qposadr[MujocoId];
-      DofAddress = model->jnt_dofadr[MujocoId];
+    protected override void OnBindToRuntime(MjbModel model, MjbData data) {
+      QposAddress = model.JntQposAdr(MujocoId);
+      DofAddress = model.JntDofAdr(MujocoId);
     }
 
     protected void Start() {
