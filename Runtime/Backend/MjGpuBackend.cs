@@ -13,49 +13,40 @@
 // limitations under the License.
 
 using System;
-using System.Runtime.InteropServices;
 
 namespace Mujoco.Mjb
 {
     /// <summary>
-    /// GPU backend wrapping the mjb_* unified C API via MuJoCo-MLX.
-    /// Uses float natively (no double conversion needed).
-    /// Dispatches to Metal GPU via MLX for accelerated physics.
+    /// GPU physics backend using the compiled Metal pipeline via MuJoCo-MLX.
+    /// Internally uses MjbBatchedSim with numEnvs=1 to route through the
+    /// eval-free vmap/compiled path (~single fused GPU dispatch per step).
+    /// Implements IMjPhysicsBackend so it can be used interchangeably with MjCpuBackend.
     /// </summary>
     public sealed unsafe class MjGpuBackend : IMjPhysicsBackend
     {
         private MjbBackend _backend;
         private MjbModel _model;
-        private MjbData _data;
+        private MjbBatchedSim _sim;
         private bool _disposed;
 
-        // Cached dimensions
         private readonly int _nq, _nv, _nu, _nbody, _njnt, _ngeom;
 
-        // Temporary buffers for single-element set operations
-        private float[] _qposBuf, _qvelBuf, _ctrlBuf;
+        // Internal buffers for ctrl (batched Step takes ctrl as argument)
+        private float[] _ctrlBuf;
+
+        // Pinned managed buffer for GetCtrl() return
+        private float[] _ctrlReturnBuf;
+
+        private static readonly int[] ResetAllMask = new int[] { 1 };
 
         /// <summary>
         /// Create a GPU backend from an XML file path.
-        /// Loads the model and creates simulation data using the MLX backend.
         /// </summary>
         public MjGpuBackend(string xmlPath)
         {
             _backend = MjbBackend.Create(MjbBackendType.MLX);
             _model = _backend.LoadModel(xmlPath);
-            _data = _model.MakeData();
-
-            var info = _model.Info;
-            _nq = info.nq;
-            _nv = info.nv;
-            _nu = info.nu;
-            _nbody = info.nbody;
-            _njnt = info.njnt;
-            _ngeom = info.ngeom;
-
-            _qposBuf = new float[_nq];
-            _qvelBuf = new float[_nv];
-            _ctrlBuf = new float[_nu];
+            Init(out _nq, out _nv, out _nu, out _nbody, out _njnt, out _ngeom);
         }
 
         /// <summary>
@@ -67,7 +58,18 @@ namespace Mujoco.Mjb
             _model = fromString
                 ? _backend.LoadModelFromString(xmlString)
                 : _backend.LoadModel(xmlString);
-            _data = _model.MakeData();
+            Init(out _nq, out _nv, out _nu, out _nbody, out _njnt, out _ngeom);
+        }
+
+        /// <summary>
+        /// Create a GPU backend with contact filtering for training.
+        /// </summary>
+        public MjGpuBackend(string xmlPath, bool footContactsOnly, int solverIterations)
+        {
+            _backend = MjbBackend.Create(MjbBackendType.MLX);
+            _model = footContactsOnly
+                ? _backend.LoadModelFiltered(xmlPath, true)
+                : _backend.LoadModel(xmlPath);
 
             var info = _model.Info;
             _nq = info.nq;
@@ -77,9 +79,36 @@ namespace Mujoco.Mjb
             _njnt = info.njnt;
             _ngeom = info.ngeom;
 
-            _qposBuf = new float[_nq];
-            _qvelBuf = new float[_nv];
+            var config = new MjbBatchedConfig
+            {
+                numEnvs = 1,
+                footContactsOnly = footContactsOnly ? 1 : 0,
+                solverIterations = solverIterations
+            };
+            _sim = _model.CreateBatchedSim(config);
             _ctrlBuf = new float[_nu];
+            _ctrlReturnBuf = new float[_nu];
+        }
+
+        private void Init(out int nq, out int nv, out int nu, out int nbody, out int njnt, out int ngeom)
+        {
+            var info = _model.Info;
+            nq = info.nq;
+            nv = info.nv;
+            nu = info.nu;
+            nbody = info.nbody;
+            njnt = info.njnt;
+            ngeom = info.ngeom;
+
+            var config = new MjbBatchedConfig
+            {
+                numEnvs = 1,
+                footContactsOnly = 0,
+                solverIterations = 0
+            };
+            _sim = _model.CreateBatchedSim(config);
+            _ctrlBuf = new float[nu];
+            _ctrlReturnBuf = new float[nu];
         }
 
         // ── Model dimensions ────────────────────────────────────────────
@@ -96,55 +125,108 @@ namespace Mujoco.Mjb
             set => _model.Timestep = value;
         }
 
+        public int Nconmax => _model.Nconmax;
+
         // ── Simulation ──────────────────────────────────────────────────
-        public void Step() => _data.Step();
-        public void Forward() => _data.Forward();
-        public void ResetData() => _data.ResetData();
-        public void RnePostConstraint() => _data.RnePostConstraint();
+
+        public void Step() => _sim.Step(_ctrlBuf);
+
+        public void Forward()
+        {
+            // The batched pipeline computes all derived quantities as part of step/reset.
+        }
+
+        public void ResetData() => _sim.Reset(ResetAllMask);
+
+        public void RnePostConstraint()
+        {
+            // The batched pipeline computes post-constraint forces as part of step.
+        }
 
         // ── State setters ───────────────────────────────────────────────
-        public void SetCtrl(float[] ctrl) => _data.SetCtrl(ctrl);
-        public void SetQpos(float[] qpos) => _data.SetQpos(qpos);
-        public void SetQvel(float[] qvel) => _data.SetQvel(qvel);
+
+        public void SetCtrl(float[] ctrl)
+        {
+            int n = Math.Min(ctrl.Length, _nu);
+            Array.Copy(ctrl, _ctrlBuf, n);
+        }
 
         public void SetCtrl(int index, float value)
         {
-            var span = _data.GetCtrl();
-            CopySpanToBuffer(span, _ctrlBuf);
             _ctrlBuf[index] = value;
-            _data.SetCtrl(_ctrlBuf);
+        }
+
+        public void SetQpos(float[] qpos)
+        {
+            throw new NotSupportedException(
+                "MjGpuBackend: SetQpos not supported — batched sim does not allow external " +
+                "state injection. Use MjCpuBackend for environments that need reset noise.");
         }
 
         public void SetQpos(int index, double value)
         {
-            var span = _data.GetQpos();
-            CopySpanToBuffer(span, _qposBuf);
-            _qposBuf[index] = (float)value;
-            _data.SetQpos(_qposBuf);
+            throw new NotSupportedException(
+                "MjGpuBackend: SetQpos not supported — batched sim does not allow external " +
+                "state injection. Use MjCpuBackend for environments that need reset noise.");
+        }
+
+        public void SetQvel(float[] qvel)
+        {
+            throw new NotSupportedException(
+                "MjGpuBackend: SetQvel not supported — batched sim does not allow external " +
+                "state injection. Use MjCpuBackend for environments that need reset noise.");
         }
 
         public void SetQvel(int index, double value)
         {
-            var span = _data.GetQvel();
-            CopySpanToBuffer(span, _qvelBuf);
-            _qvelBuf[index] = (float)value;
-            _data.SetQvel(_qvelBuf);
+            throw new NotSupportedException(
+                "MjGpuBackend: SetQvel not supported — batched sim does not allow external " +
+                "state injection. Use MjCpuBackend for environments that need reset noise.");
         }
 
         // ── State getters ───────────────────────────────────────────────
-        public MjbFloatSpan GetQpos() => _data.GetQpos();
-        public MjbFloatSpan GetQvel() => _data.GetQvel();
-        public MjbFloatSpan GetCtrl() => _data.GetCtrl();
-        public MjbFloatSpan GetXpos() => _data.GetXpos();
-        public MjbFloatSpan GetXipos() => _data.GetXipos();
-        public MjbFloatSpan GetCinert() => _data.GetCinert();
-        public MjbFloatSpan GetCvel() => _data.GetCvel();
-        public MjbFloatSpan GetQfrcActuator() => _data.GetQfrcActuator();
-        public MjbFloatSpan GetCfrcExt() => _data.GetCfrcExt();
-        public MjbFloatSpan GetSubtreeCom() => _data.GetSubtreeCom();
-        public MjbFloatSpan GetGeomXpos() => _data.GetGeomXpos();
-        public MjbFloatSpan GetGeomXmat() => _data.GetGeomXmat();
-        public MjbFloatSpan GetSensordata() => _data.GetSensordata();
+
+        public MjbFloatSpan GetQpos() => _sim.GetQpos();
+        public MjbFloatSpan GetQvel() => _sim.GetQvel();
+        public MjbFloatSpan GetXpos() => _sim.GetXpos();
+        public MjbFloatSpan GetCinert() => _sim.GetCinert();
+        public MjbFloatSpan GetCvel() => _sim.GetCvel();
+        public MjbFloatSpan GetQfrcActuator() => _sim.GetQfrcActuator();
+        public MjbFloatSpan GetCfrcExt() => _sim.GetCfrcExt();
+        public MjbFloatSpan GetSubtreeCom() => _sim.GetSubtreeCom();
+
+        public MjbFloatSpan GetCtrl()
+        {
+            Array.Copy(_ctrlBuf, _ctrlReturnBuf, _nu);
+            fixed (float* p = _ctrlReturnBuf)
+                return new MjbFloatSpan(p, _nu);
+        }
+
+        public MjbFloatSpan GetXipos()
+        {
+            throw new NotSupportedException(
+                "MjGpuBackend: GetXipos not available from batched pipeline. Use GetXpos() instead.");
+        }
+
+        public MjbFloatSpan GetGeomXpos()
+        {
+            throw new NotSupportedException(
+                "MjGpuBackend: GetGeomXpos not available from batched pipeline. " +
+                "MjScene uses CPU Data for rendering — this method should not be called on the GPU backend.");
+        }
+
+        public MjbFloatSpan GetGeomXmat()
+        {
+            throw new NotSupportedException(
+                "MjGpuBackend: GetGeomXmat not available from batched pipeline. " +
+                "MjScene uses CPU Data for rendering — this method should not be called on the GPU backend.");
+        }
+
+        public MjbFloatSpan GetSensordata()
+        {
+            throw new NotSupportedException(
+                "MjGpuBackend: GetSensordata not available from batched pipeline.");
+        }
 
         // ── Model accessors ─────────────────────────────────────────────
         public float BodyMass(int bodyId) => _model.BodyMass(bodyId);
@@ -154,20 +236,12 @@ namespace Mujoco.Mjb
         public int JntDofAdr(int jntId) => _model.JntDofAdr(jntId);
         public int JntType(int jntId) => _model.JntType(jntId);
         public int GeomType(int geomId) => _model.GeomType(geomId);
-        public int Nconmax => _model.Nconmax;
-
-        // ── Helpers ─────────────────────────────────────────────────────
-        private static void CopySpanToBuffer(MjbFloatSpan span, float[] buf)
-        {
-            int n = Math.Min(span.Length, buf.Length);
-            for (int i = 0; i < n; i++) buf[i] = span[i];
-        }
 
         public void Dispose()
         {
             if (_disposed) return;
             _disposed = true;
-            _data?.Dispose();
+            _sim?.Dispose();
             _model?.Dispose();
             _backend?.Dispose();
         }
