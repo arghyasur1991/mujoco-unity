@@ -14,6 +14,7 @@
 
 using System;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Mujoco.Mjb
 {
@@ -172,6 +173,47 @@ namespace Mujoco.Mjb
                 float* ptr = MjbNativeMethods.mjb_model_geom_quat(Handle, &n);
                 return new MjbFloatSpan(ptr, n);
             }
+        }
+
+        /// <summary>
+        /// Save the compiled model to an XML file. Throws on error.
+        /// </summary>
+        public void SaveLastXml(string path)
+        {
+            ThrowIfDisposed();
+            var errorBuf = new StringBuilder(1024);
+            int result = MjbNativeMethods.mjb_save_last_xml(Handle, path, errorBuf, errorBuf.Capacity);
+            if (result != 0)
+                throw new System.IO.IOException($"Error saving model: {errorBuf}");
+        }
+
+        /// <summary>
+        /// Write values to model hfield_data starting at the given offset.
+        /// </summary>
+        public unsafe void SetHfieldData(int offset, float[] values)
+        {
+            ThrowIfDisposed();
+            fixed (float* p = values)
+                MjbNativeMethods.mjb_model_set_hfield_data(Handle, offset, p, values.Length);
+        }
+
+        /// <summary>
+        /// Load a MuJoCo plugin library (.so/.dylib).
+        /// </summary>
+        public static void LoadPluginLibrary(string path)
+        {
+            MjbNativeMethods.mjb_load_plugin_library(path);
+        }
+
+        /// <summary>
+        /// Compute 6D object velocity (3 rotational + 3 translational).
+        /// </summary>
+        public unsafe void ObjectVelocity(MjbData data, int objtype, int objid,
+            int flgLocal, float[] result6)
+        {
+            ThrowIfDisposed();
+            fixed (float* p = result6)
+                MjbNativeMethods.mjb_object_velocity(Handle, data.Handle, objtype, objid, flgLocal, p);
         }
 
         public MjbData MakeData()

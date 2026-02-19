@@ -21,6 +21,7 @@ using System.Reflection;
 using System.Xml;
 using UnityEditor;
 using UnityEngine;
+using Mujoco.Mjb;
 
 namespace Mujoco {
 
@@ -32,7 +33,7 @@ public class MjImporterWithAssets : MjcfImporter {
   private string _sourceMeshesDir;
   private string _targetMeshesDir;
   private string _targetAssetDir;
-  private unsafe MujocoLib.mjModel_* _mjModel = null;
+  private MjbModel _mjModel = null;
 
   // Imports the scene from the specified file, which should be a well-formed MJCF document.
   // The imported scene will be placed under a single node with the requested name assigned.
@@ -44,14 +45,13 @@ public class MjImporterWithAssets : MjcfImporter {
   //   Exception if the parsed XML is malformed or contains rough errors. If an exception is thrown,
   //   the entire imported scene will be automatically deleted.
   // TODO(etom) - reconsider unencouraged pattern of validation through exception side-effects.
-  public unsafe GameObject ImportFile(string filePath) {
-    // If MuJoCo can't parse the mjcfString, we abort the entire process.
-    // MjEngineTool.LoadModelFromString throws an exception when MuJoCo fails to parse the provided
-    // mjcfString.
+  public GameObject ImportFile(string filePath) {
     var name = Path.GetFileNameWithoutExtension(filePath) + $"{UnityEngine.Random.Range(0,999)}";
     string newPath = Path.Combine(Application.temporaryCachePath, $"{name}.xml");
     MjEngineTool.LoadPlugins();
-    _mjModel = MjEngineTool.LoadModelFromFile(filePath);
+    using (var backend = MjbBackend.Create(MjbBackendType.CPU)) {
+      _mjModel = backend.LoadModel(filePath);
+    }
     MjEngineTool.SaveModelToFile(newPath, _mjModel);
     Debug.Log($"Imported MJCF loaded, saved to {newPath}");
     string mjcfString = File.ReadAllText(newPath);
@@ -59,7 +59,7 @@ public class MjImporterWithAssets : MjcfImporter {
     try {
       root = ImportString(mjcfString, name, filePath);
     } finally {
-      MujocoLib.mj_deleteModel(_mjModel);
+      _mjModel.Dispose();
     }
     return root;
   }

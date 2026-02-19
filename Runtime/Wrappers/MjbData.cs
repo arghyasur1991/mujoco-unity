@@ -358,6 +358,51 @@ namespace Mujoco.Mjb
             return (ptr, n);
         }
 
+        // ── Per-index state setters ─────────────────────────────────
+
+        public void SetQposAt(int index, float value)
+        {
+            ThrowIfDisposed();
+            MjbNativeMethods.mjb_set_qpos_at(Handle, index, value);
+        }
+
+        public void SetQvelAt(int index, float value)
+        {
+            ThrowIfDisposed();
+            MjbNativeMethods.mjb_set_qvel_at(Handle, index, value);
+        }
+
+        public void SetCtrlAt(int index, float value)
+        {
+            ThrowIfDisposed();
+            MjbNativeMethods.mjb_set_ctrl_at(Handle, index, value);
+        }
+
+        // ── xfrc_applied ────────────────────────────────────────────
+
+        public unsafe MjbFloatSpan GetXfrcApplied()
+        {
+            ThrowIfDisposed();
+            int n;
+            float* ptr = MjbNativeMethods.mjb_get_xfrc_applied(Handle, &n);
+            return new MjbFloatSpan(ptr, n);
+        }
+
+        public unsafe void SetXfrcApplied(float[] values)
+        {
+            ThrowIfDisposed();
+            fixed (float* p = values)
+                MjbNativeMethods.mjb_set_xfrc_applied(Handle, p, values.Length);
+        }
+
+        // ── Warnings / diagnostics ──────────────────────────────────
+
+        public int GetWarningCount(int index)
+        {
+            ThrowIfDisposed();
+            return MjbNativeMethods.mjb_get_warning_count(Handle, index);
+        }
+
         // ── Mocap setters ────────────────────────────────────────────
 
         public unsafe void SetMocapPos(float[] pos)

@@ -242,6 +242,49 @@ namespace Mujoco.Mjb
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
         public static extern void mjb_set_mocap_quat(IntPtr data, float* quat, int n);
 
+        // ── Per-index state setters ─────────────────────────────────────
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void mjb_set_qpos_at(IntPtr data, int index, float value);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void mjb_set_qvel_at(IntPtr data, int index, float value);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void mjb_set_ctrl_at(IntPtr data, int index, float value);
+
+        // ── xfrc_applied ────────────────────────────────────────────────
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern float* mjb_get_xfrc_applied(IntPtr data, int* nOut);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void mjb_set_xfrc_applied(IntPtr data, float* values, int n);
+
+        // ── Warnings / diagnostics ──────────────────────────────────────
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int mjb_get_warning_count(IntPtr data, int index);
+
+        // ── Model I/O (save) ────────────────────────────────────────────
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int mjb_save_last_xml(IntPtr model, string path,
+            System.Text.StringBuilder errorBuf, int errorBufSize);
+
+        // ── Utility wrappers ────────────────────────────────────────────
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void mjb_object_velocity(IntPtr model, IntPtr data,
+            int objtype, int objid, int flgLocal, float* result6);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void mjb_load_plugin_library(string path);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void mjb_model_set_hfield_data(IntPtr model, int offset,
+            float* values, int n);
+
         // ── Batched simulation ──────────────────────────────────────────
 
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]

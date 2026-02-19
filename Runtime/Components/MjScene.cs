@@ -35,8 +35,9 @@ public class PhysicsRuntimeException : Exception {
 
 public class MjScene : MonoBehaviour {
 
-  public unsafe MujocoLib.mjModel_* Model = null;
-  public unsafe MujocoLib.mjData_* Data = null;
+  public MjbBackend Backend { get; private set; }
+  public MjbModel Model { get; private set; }
+  public MjbData Data { get; private set; }
 
   [Header("Physics Backend")]
   [Tooltip("CPU: MuJoCo C (double, CPU). GPU: MuJoCo-MLX (float32, Metal GPU). " +
@@ -44,24 +45,12 @@ public class MjScene : MonoBehaviour {
   public PhysicsBackendType physicsBackend = PhysicsBackendType.CPU;
 
   private IMjPhysicsBackend _gpuBackend;
-  private MjCpuBackend _cpuBackend; // non-owning wrapper around Model/Data for component access
+  private MjCpuBackend _cpuBackend;
   private float[] _gpuCtrlBuf;
 
-  /// <summary>
-  /// The active GPU physics backend, or null if CPU mode.
-  /// For GPU, this is the MjGpuBackend driving physics.
-  /// </summary>
   public IMjPhysicsBackend GpuBackend => _gpuBackend;
-
-  /// <summary>
-  /// Non-owning CPU backend wrapping Model/Data. Always available after CreateScene.
-  /// Components use this for all accessor needs (name lookups, data reads).
-  /// Even in GPU mode, components render from CPU Data (synced after GPU step).
-  /// </summary>
   public IMjPhysicsBackend CpuPhysicsBackend => _cpuBackend;
 
-  // Public and global access to the active MjSceneGenerationContext.
-  // Throws an exception if accessed when the scene is not being generated.
   public MjcfGenerationContext GenerationContext {
     get {
       if (_generationContext == null) {
@@ -77,10 +66,8 @@ public class MjScene : MonoBehaviour {
       if (_instance == null) {
         var instances = FindObjectsByType<MjScene>(FindObjectsSortMode.None);
         if (instances.Length == 1) {
-          // Re-acquire after domain reload or play mode re-entry
           _instance = instances[0];
         } else if (instances.Length > 1) {
-          // Keep first, destroy duplicates
           _instance = instances[0];
           for (int i = 1; i < instances.Length; i++) {
             Destroy(instances[i].gameObject);
@@ -100,7 +87,6 @@ public class MjScene : MonoBehaviour {
     if (_instance == null) {
       _instance = this;
     } else if (_instance != this) {
-      // Another instance already claimed singleton - destroy this duplicate
       Destroy(gameObject);
     }
   }
@@ -115,38 +101,29 @@ public class MjScene : MonoBehaviour {
   public event EventHandler<MjStepArgs> postUpdateEvent;
   public event EventHandler<MjStepArgs> preDestroyEvent;
 
-  protected unsafe void Start() {
+  protected void Start() {
     SceneRecreationAtLateUpdateRequested = false;
     CreateScene();
   }
 
-  protected unsafe void OnDestroy() {
+  protected void OnDestroy() {
     DestroyScene();
   }
 
-  /// <summary>
-  /// When true, FixedUpdate skips automatic physics stepping.
-  /// Use this for RL training where the trainer explicitly calls StepScene().
-  /// </summary>
   public bool PauseSimulation = false;
 
-  protected unsafe void FixedUpdate() {
+  protected void FixedUpdate() {
     if (PauseSimulation) return;
     preUpdateEvent?.Invoke(this, new MjStepArgs(Model, Data));
     StepScene();
     postUpdateEvent?.Invoke(this, new MjStepArgs(Model, Data));
   }
 
-  /// <summary>
-  /// Reset physics state to initial configuration without recreating the scene.
-  /// Much faster than RecreateScene() - suitable for RL episode resets.
-  /// Resets qpos, qvel, ctrl, and all derived quantities to their defaults.
-  /// </summary>
-  public unsafe void ResetData() {
+  public void ResetData() {
     if (Model == null || Data == null) return;
-    MujocoLib.mj_resetData(Model, Data);
+    Data.ResetData();
     _gpuBackend?.ResetData();
-    MujocoLib.mj_forward(Model, Data);
+    Data.Forward();
     _gpuBackend?.Forward();
     SyncUnityToMjState();
     postInitEvent?.Invoke(this, new MjStepArgs(Model, Data));
@@ -154,40 +131,20 @@ public class MjScene : MonoBehaviour {
 
   public bool SceneRecreationAtLateUpdateRequested = false;
 
-  protected unsafe void LateUpdate() {
+  protected void LateUpdate() {
     if (SceneRecreationAtLateUpdateRequested) {
       RecreateScene();
       SceneRecreationAtLateUpdateRequested = false;
     }
   }
 
-  // Context used during scene generation where components will store their shared dependencies
-  // (such as the mesh assets they reference, or common compiler settings that need to be resolved
-  // globally).
-  // The field will be initialized with a class instance only during the scene generation.
-  // A public read-only property will provide MjComponents with access to the instance
-  // of that field.
   private MjcfGenerationContext _generationContext;
 
-  // Builds a new Mujoco scene.
-  public unsafe XmlDocument CreateScene(bool skipCompile=false) {
+  public XmlDocument CreateScene(bool skipCompile=false) {
     if (_generationContext != null) {
       throw new InvalidOperationException(
           "The scene is currently being generated on another thread.");
     }
-    // Linearize the hierarchy of transforms of the components.
-    // We will use this list to update the transforms of the associated GameObject in a way that
-    // ensures we first update the parent transforms, and then we progress down the hierarchy
-    // tree and update the children.
-    // We're doing this, because we will use Unity's hierarchical transforms system to translate
-    // Mujoco elements' world transforms directly to Unity's world coordinates. That however
-    // will only work if we can guarantee that for every child, the parent transforms have already
-    // been recalculated.
-    //
-    // DESIGN: An alternative to that would be to operate in local space on the Unity side.
-    // I briefly explored that approach, but decided against it. It increases the amount of code
-    // on the side of the individual components. This solution allows to restrict the code in the
-    // components to a bare minimum, at the expense of one extra method here.
     var hierarchyRoots = FindObjectsByType<MjComponent>(FindObjectsSortMode.None)
         .Where(component => MjHierarchyTool.FindParentComponent(component) == null)
         .Select(component => component.transform)
@@ -213,46 +170,40 @@ public class MjScene : MonoBehaviour {
     }
     _generationContext = null;
 
-    // Save the Mjcf to a file for debug purposes.
     var settings = MjGlobalSettings.Instance;
     if (settings && !string.IsNullOrEmpty(settings.DebugFileName)) {
       SaveToFile(sceneMjcf, Path.Combine(Application.temporaryCachePath, settings.DebugFileName));
     }
 
     if (!skipCompile) {
-      // Compile the scene from the Mjcf.
       CompileScene(sceneMjcf, _orderedComponents);
     }
     postInitEvent?.Invoke(this, new MjStepArgs(Model, Data));
     return sceneMjcf;
   }
 
-  private unsafe void CompileScene(
+  private void CompileScene(
       XmlDocument mjcf, IEnumerable<MjComponent> components) {
-    Model = MjEngineTool.LoadModelFromString(mjcf.OuterXml);
+    Backend = MjbBackend.Create(MjbBackendType.CPU);
+    Model = Backend.LoadModelFromString(mjcf.OuterXml);
     if (Model == null) {
       throw new NullReferenceException("Model loading failed, see other errors for root cause.");
-    } else {
-      Data = MujocoLib.mj_makeData(Model);
     }
+    Data = Model.MakeData();
     if (Data == null) {
-      throw new NullReferenceException("Model loaded but mj_makeData failed.");
+      throw new NullReferenceException("Model loaded but MakeData failed.");
     }
 
-    // Create non-owning CPU backend wrapper for component accessor access.
     _cpuBackend = new MjCpuBackend(Model, Data);
 
-    // Bind the components to their Mujoco counterparts.
     foreach (var component in components) {
       component.BindToRuntime(Model, Data);
     }
 
-    // If GPU backend selected, create MjGpuBackend from the same MJCF.
-    // CPU Model/Data remain for component binding and rendering sync.
     if (physicsBackend == PhysicsBackendType.GPU) {
       try {
         _gpuBackend = new MjGpuBackend(mjcf.OuterXml, fromString: true);
-        _gpuCtrlBuf = new float[(int)Model->nu];
+        _gpuCtrlBuf = new float[Model.Info.nu];
         Debug.Log($"MjScene: GPU backend (MuJoCo-MLX) active. nq={_gpuBackend.Nq}, nu={_gpuBackend.Nu}");
       } catch (Exception e) {
         Debug.LogError($"MjScene: GPU backend creation failed, falling back to CPU: {e.Message}");
@@ -262,7 +213,7 @@ public class MjScene : MonoBehaviour {
     }
   }
 
-  public unsafe void SyncUnityToMjState() {
+  public void SyncUnityToMjState() {
     foreach (var component in _orderedComponents) {
       if (component != null && component.isActiveAndEnabled) {
         component.OnSyncState(Data);
@@ -270,133 +221,92 @@ public class MjScene : MonoBehaviour {
     }
   }
 
-  // This must be called after every change in the Unity scene during runtime, in order to keep the
-  // MuJoCo physics scene in sync.  The spatial arrangement in the MJCF that creates the new physics
-  // is defined by the Unity transforms; therefore, we:
-  // 1. cache the joint states;
-  // 2. reset the Unity scene to its configuration at initialization;
-  // 3. recreate the scene in this pristine configuration;
-  // 4. rehydrate the physics scene, and sync the Unity scene to it.
   public unsafe void RecreateScene() {
-    // cache joint states in order to re-apply it to the new scene
     var joints = FindObjectsByType<MjBaseJoint>(FindObjectsSortMode.None);
-    var positions = new Dictionary<MjBaseJoint, double[]>();
-    var velocities = new Dictionary<MjBaseJoint, double[]>();
+    var positions = new Dictionary<MjBaseJoint, float[]>();
+    var velocities = new Dictionary<MjBaseJoint, float[]>();
     foreach (var joint in joints) {
-      if (joint.QposAddress > -1) { // newly added components shouldn't be cached
-        switch (Model->jnt_type[joint.MujocoId]) {
+      if (joint.QposAddress > -1) {
+        int jntType = Model.JntType(joint.MujocoId);
+        var qpos = Data.GetQpos();
+        var qvel = Data.GetQvel();
+        int qa = joint.QposAddress;
+        int da = joint.DofAddress;
+        switch (jntType) {
           default:
-          case (int)MujocoLib.mjtJoint.mjJNT_HINGE:
-          case (int)MujocoLib.mjtJoint.mjJNT_SLIDE:
-            positions[joint] = new double[] {Data->qpos[joint.QposAddress]};
-            velocities[joint] = new double[] {Data->qvel[joint.DofAddress]};
+          case (int)mjtJoint.mjJNT_HINGE:
+          case (int)mjtJoint.mjJNT_SLIDE:
+            positions[joint] = new float[] { qpos[qa] };
+            velocities[joint] = new float[] { qvel[da] };
             break;
-          case (int)MujocoLib.mjtJoint.mjJNT_BALL:
-            positions[joint] = new double[] {
-                Data->qpos[joint.QposAddress],
-                Data->qpos[joint.QposAddress+1],
-                Data->qpos[joint.QposAddress+2],
-                Data->qpos[joint.QposAddress+3]};
-            velocities[joint] = new double[] {
-                Data->qvel[joint.DofAddress],
-                Data->qvel[joint.DofAddress+1],
-                Data->qvel[joint.DofAddress+2]};
+          case (int)mjtJoint.mjJNT_BALL:
+            positions[joint] = new float[] { qpos[qa], qpos[qa+1], qpos[qa+2], qpos[qa+3] };
+            velocities[joint] = new float[] { qvel[da], qvel[da+1], qvel[da+2] };
             break;
-          case (int)MujocoLib.mjtJoint.mjJNT_FREE:
-            positions[joint] = new double[] {
-                Data->qpos[joint.QposAddress],
-                Data->qpos[joint.QposAddress+1],
-                Data->qpos[joint.QposAddress+2],
-                Data->qpos[joint.QposAddress+3],
-                Data->qpos[joint.QposAddress+4],
-                Data->qpos[joint.QposAddress+5],
-                Data->qpos[joint.QposAddress+6]};
-            velocities[joint] = new double[] {
-                Data->qvel[joint.DofAddress],
-                Data->qvel[joint.DofAddress+1],
-                Data->qvel[joint.DofAddress+2],
-                Data->qvel[joint.DofAddress+3],
-                Data->qvel[joint.DofAddress+4],
-                Data->qvel[joint.DofAddress+5]};
+          case (int)mjtJoint.mjJNT_FREE:
+            positions[joint] = new float[] {
+                qpos[qa], qpos[qa+1], qpos[qa+2], qpos[qa+3],
+                qpos[qa+4], qpos[qa+5], qpos[qa+6] };
+            velocities[joint] = new float[] {
+                qvel[da], qvel[da+1], qvel[da+2],
+                qvel[da+3], qvel[da+4], qvel[da+5] };
             break;
         }
       }
     }
 
-    // update unity transforms according to qpos0, so they're ready to create the new MJCF
-    MujocoLib.mj_resetData(Model, Data);
-    MujocoLib.mj_kinematics(Model, Data);
+    Data.ResetData();
+    Data.Kinematics();
     SyncUnityToMjState();
 
-    // Delete previous model, data
     DestroyScene();
-    // Create a new MJCF and new model+data, indices may be different
     CreateScene();
 
-    // for joints that persisted, set state of the new MuJoCo scene according to the cached state
     foreach (var joint in joints) {
       try {
-        var position = positions[joint]; // this will fail for new joints, hence try/catch
+        var position = positions[joint];
         var velocity = velocities[joint];
-        switch (Model->jnt_type[joint.MujocoId]) {
+        int jntType = Model.JntType(joint.MujocoId);
+        int qa = joint.QposAddress;
+        int da = joint.DofAddress;
+        switch (jntType) {
           default:
-          case (int)MujocoLib.mjtJoint.mjJNT_HINGE:
-          case (int)MujocoLib.mjtJoint.mjJNT_SLIDE:
-            Data->qpos[joint.QposAddress] = position[0];
-            Data->qvel[joint.DofAddress] = velocity[0];
+          case (int)mjtJoint.mjJNT_HINGE:
+          case (int)mjtJoint.mjJNT_SLIDE:
+            Data.SetQposAt(qa, position[0]);
+            Data.SetQvelAt(da, velocity[0]);
             break;
-          case (int)MujocoLib.mjtJoint.mjJNT_BALL:
-            Data->qpos[joint.QposAddress] = position[0];
-            Data->qpos[joint.QposAddress+1] = position[1];
-            Data->qpos[joint.QposAddress+2] = position[2];
-            Data->qpos[joint.QposAddress+3] = position[3];
-            Data->qvel[joint.DofAddress] = velocity[0];
-            Data->qvel[joint.DofAddress+1] = velocity[1];
-            Data->qvel[joint.DofAddress+2] = velocity[2];
+          case (int)mjtJoint.mjJNT_BALL:
+            for (int i = 0; i < 4; i++) Data.SetQposAt(qa + i, position[i]);
+            for (int i = 0; i < 3; i++) Data.SetQvelAt(da + i, velocity[i]);
             break;
-          case (int)MujocoLib.mjtJoint.mjJNT_FREE:
-            Data->qpos[joint.QposAddress] = position[0];
-            Data->qpos[joint.QposAddress+1] = position[1];
-            Data->qpos[joint.QposAddress+2] = position[2];
-            Data->qpos[joint.QposAddress+3] = position[3];
-            Data->qpos[joint.QposAddress+4] = position[4];
-            Data->qpos[joint.QposAddress+5] = position[5];
-            Data->qpos[joint.QposAddress+6] = position[6];
-            Data->qvel[joint.DofAddress] = velocity[0];
-            Data->qvel[joint.DofAddress+1] = velocity[1];
-            Data->qvel[joint.DofAddress+2] = velocity[2];
-            Data->qvel[joint.DofAddress+3] = velocity[3];
-            Data->qvel[joint.DofAddress+4] = velocity[4];
-            Data->qvel[joint.DofAddress+5] = velocity[5];
+          case (int)mjtJoint.mjJNT_FREE:
+            for (int i = 0; i < 7; i++) Data.SetQposAt(qa + i, position[i]);
+            for (int i = 0; i < 6; i++) Data.SetQvelAt(da + i, velocity[i]);
             break;
         }
       } catch {}
     }
-    // update mj transforms:
-    MujocoLib.mj_kinematics(Model, Data);
+    Data.Kinematics();
     SyncUnityToMjState();
   }
 
-  // Destroys the Mujoco scene.
-  public unsafe void DestroyScene() {
+  public void DestroyScene() {
     preDestroyEvent?.Invoke(this, new MjStepArgs(Model, Data));
     _gpuBackend?.Dispose();
     _gpuBackend = null;
     _gpuCtrlBuf = null;
     _cpuBackend?.Dispose();
     _cpuBackend = null;
-    if (Model != null) {
-      MujocoLib.mj_deleteModel(Model);
-      Model = null;
-    }
-    if (Data != null) {
-      MujocoLib.mj_deleteData(Data);
-      Data = null;
-    }
+    Data?.Dispose();
+    Data = null;
+    Model?.Dispose();
+    Model = null;
+    Backend?.Dispose();
+    Backend = null;
   }
 
-  // Updates the scene and the state of Mujoco simulation.
-  public unsafe void StepScene() {
+  public void StepScene() {
     if (Model == null || Data == null) {
       throw new NullReferenceException("Failed to create Mujoco runtime.");
     }
@@ -404,25 +314,25 @@ public class MjScene : MonoBehaviour {
     Profiler.BeginSample("MjStep.mj_step");
 
     if (_gpuBackend != null) {
-      // GPU path: actuators write to Data->ctrl, we forward that to GPU
-      int nu = (int)Model->nu;
-      for (int i = 0; i < nu; i++) _gpuCtrlBuf[i] = (float)Data->ctrl[i];
+      var ctrl = Data.GetCtrl();
+      int nu = ctrl.Length;
+      for (int i = 0; i < nu; i++) _gpuCtrlBuf[i] = ctrl[i];
       _gpuBackend.SetCtrl(_gpuCtrlBuf);
       _gpuBackend.Step();
 
-      // Copy state back to CPU Data for component rendering
       var qpos = _gpuBackend.GetQpos();
       var qvel = _gpuBackend.GetQvel();
-      int nq = qpos.Length, nv = qvel.Length;
-      for (int i = 0; i < nq; i++) Data->qpos[i] = qpos[i];
-      for (int i = 0; i < nv; i++) Data->qvel[i] = qvel[i];
-      MujocoLib.mj_forward(Model, Data);
+      float[] qposArr = qpos.ToArray();
+      float[] qvelArr = qvel.ToArray();
+      Data.SetQpos(qposArr);
+      Data.SetQvel(qvelArr);
+      Data.Forward();
     } else if (ctrlCallback != null) {
-      MujocoLib.mj_step1(Model, Data);
+      Data.Step1();
       ctrlCallback?.Invoke(this, new MjStepArgs(Model, Data));
-      MujocoLib.mj_step2(Model, Data);
+      Data.Step2();
     } else {
-      MujocoLib.mj_step(Model, Data);
+      Data.Step();
     }
     Profiler.EndSample(); // MjStep.mj_step
 
@@ -435,47 +345,30 @@ public class MjScene : MonoBehaviour {
     Profiler.EndSample(); // MjStep
   }
 
-  private unsafe void CheckForPhysicsException() {
-    if (Data->warning0.number > 0) {
-      Data->warning0.number = 0;
-      throw new PhysicsRuntimeException("INERTIA: (Near-) Singular inertia matrix.");
-    }
-    if (Data->warning1.number > 0) {
-      Data->warning1.number = 0;
-      throw new PhysicsRuntimeException($"CONTACTFULL: nconmax {Model->nconmax} isn't sufficient.");
-    }
-    if (Data->warning2.number > 0) {
-      Data->warning2.number = 0;
-      throw new PhysicsRuntimeException("CNSTRFULL: njmax {Model.njmax} isn't sufficient.");
-    }
-    if (Data->warning3.number > 0) {
-      Data->warning3.number = 0;
-      throw new PhysicsRuntimeException("VGEOMFULL: who constructed a mjvScene?!");
-    }
-    if (Data->warning4.number > 0) {
-      Data->warning4.number = 0;
-      throw new PhysicsRuntimeException("BADQPOS: NaN/inf in qpos.");
-    }
-    if (Data->warning5.number > 0) {
-      Data->warning5.number = 0;
-      throw new PhysicsRuntimeException("BADQVEL: NaN/inf in qvel.");
-    }
-    if (Data->warning6.number > 0) {
-      Data->warning6.number = 0;
-      throw new PhysicsRuntimeException("BADQACC: NaN/inf in qacc.");
-    }
-    if (Data->warning7.number > 0) {
-      Data->warning7.number = 0;
-      throw new PhysicsRuntimeException("BADCTRL: NaN/inf in ctrl.");
+  private void CheckForPhysicsException() {
+    string[] warnings = {
+        "INERTIA: (Near-) Singular inertia matrix.",
+        "CONTACTFULL: nconmax isn't sufficient.",
+        "CNSTRFULL: njmax isn't sufficient.",
+        "VGEOMFULL: who constructed a mjvScene?!",
+        "BADQPOS: NaN/inf in qpos.",
+        "BADQVEL: NaN/inf in qvel.",
+        "BADQACC: NaN/inf in qacc.",
+        "BADCTRL: NaN/inf in ctrl.",
+    };
+    for (int i = 0; i < warnings.Length; i++) {
+      if (Data.GetWarningCount(i) > 0) {
+        throw new PhysicsRuntimeException(warnings[i]);
+      }
     }
   }
 
-  // Generate a Mujoco scene description using the specified components.
+  // ── Scene MJCF generation (unchanged) ─────────────────────────────
+
   private XmlDocument GenerateSceneMjcf(IEnumerable<MjComponent> components) {
     var doc = new XmlDocument();
     var MjRoot = (XmlElement)doc.AppendChild(doc.CreateElement("mujoco"));
 
-    // Scene definition section.
     var worldMjcf = (XmlElement)MjRoot.AppendChild(doc.CreateElement("worldbody"));
     BuildHierarchicalMjcf(
         doc,
@@ -487,7 +380,6 @@ public class MjScene : MonoBehaviour {
             (component is MjSite)),
         worldMjcf);
 
-    // Non-hierarchical sections:
     MjRoot.AppendChild(GenerateMjcfSection(
         doc, components.Where(component => component is MjExclude), "contact"));
 
@@ -508,7 +400,6 @@ public class MjScene : MonoBehaviour {
                             components.Where(component => component is MjBaseSensor)
                                 .OrderBy(component => component.transform.GetSiblingIndex()),
                             "sensor"));
-    // Generate the Mjcf of the runtime dependencies added to the context.
     _generationContext.GenerateMjcf(MjRoot);
     return doc;
   }
@@ -527,16 +418,12 @@ public class MjScene : MonoBehaviour {
       XmlDocument doc, IEnumerable<MjComponent> components, XmlElement worldMjcf) {
     var associations = new Dictionary<MjComponent, XmlElement>();
 
-    // Build individual Mjcfs.
     foreach (var component in components) {
       var componentMjcf = component.GenerateMjcf(
           _generationContext.GenerateName(component), doc);
-      // We'll use a dictionary to define associations between the components and the corresponding
-      // Mjcf elements.
       associations.Add(component, componentMjcf);
     }
 
-    // Connect the Mjcfs into hierarchy.
     foreach (var component in components) {
       var componentMjcf = associations[component];
       var parentComponent = MjHierarchyTool.FindParentComponent(component);
@@ -549,7 +436,6 @@ public class MjScene : MonoBehaviour {
     }
   }
 
-  // Saves an XML document to the specified file.
   private void SaveToFile(XmlDocument document, string filePath) {
     try {
       using (var stream = File.Open(filePath, FileMode.Create)) {
@@ -567,11 +453,11 @@ public class MjScene : MonoBehaviour {
 
 public class MjStepArgs : EventArgs
 {
-  public unsafe MjStepArgs(MujocoLib.mjModel_* model, MujocoLib.mjData_* data){
+  public MjStepArgs(MjbModel model, MjbData data){
     this.model = model;
     this.data = data;
   }
-  public readonly unsafe MujocoLib.mjModel_* model;
-  public readonly unsafe MujocoLib.mjData_* data;
+  public readonly MjbModel model;
+  public readonly MjbData data;
 }
 }

@@ -19,17 +19,15 @@ using System.IO;
 using System.Text;
 using System.Xml;
 using UnityEngine;
+using Mujoco.Mjb;
 
 namespace Mujoco {
 
-// Mujoco engine helper methods.
 public static class MjEngineTool {
   private const int _elementsPerPosition = 3;
   private const int _elementsPerRotation = 4;
   private const int _elementsPerTransform = 7;
   private const int _elementsPerEquality = 11;
-  private static double[] _mjQuat = new double[4];
-  private static double[] _mjMat = new double[9];
 
   public static string Sanitize(string name) {
     return name.Replace('/', '_');
@@ -39,47 +37,30 @@ public static class MjEngineTool {
     return FormattableString.Invariant(interpolated);
   }
 
-  // Loads a model from the specified file.
-  // `filename` should contain an absolute path to the file.
-  public static unsafe MujocoLib.mjModel_* LoadModelFromFile(string fileName) {
-    var errorBuf = new StringBuilder(1024);
-    MujocoLib.mjModel_* model = MujocoLib.mj_loadXML(fileName, null, errorBuf, 1024);
-    if (model == null || errorBuf.Length > 0) {
-      throw new IOException(string.Format("Error loading the model: {0}", errorBuf));
-    }
-    return model;
+  // ── Model I/O via mjb ──────────────────────────────────────────────────
+
+  public static MjbModel LoadModel(MjbBackend backend, string xmlPath) {
+    return backend.LoadModel(xmlPath);
   }
 
-  // Saves a model to the specified file.
-  // `filename` should contain an absolute path to the file.
-  public static unsafe void SaveModelToFile(string fileName, MujocoLib.mjModel_* model) {
-    var errorBuf = new StringBuilder(1024);
-    MujocoLib.mj_saveLastXML(fileName, model, errorBuf, 1024);
-    if (errorBuf.Length > 0) {
-      throw new IOException(string.Format("Error saving the model: {0}", errorBuf));
-    }
+  public static MjbModel LoadModelFromString(MjbBackend backend, string contents) {
+    return backend.LoadModelFromString(contents);
   }
 
-  // Loads a model from a string.
-  // It allows to perform diskless instantiation of Mujoco models.
-  public static unsafe MujocoLib.mjModel_* LoadModelFromString(string contents) {
-    using (var vfs = new MjVfs()) {
-      var filename = "filename";
-      vfs.AddFile(filename, contents);
-      return vfs.LoadXML(filename);
-    }
+  public static void SaveModelToFile(string fileName, MjbModel model) {
+    model.SaveLastXml(fileName);
   }
 
-  // Stores a unity vector in a Mujoco target buffer.
-  public static unsafe void SetMjVector3(double* mjTarget, Vector3 unityVec) {
+  // ── Float-pointer helpers (mjb API returns float*) ─────────────────────
+
+  public static unsafe void SetMjVector3(float* mjTarget, Vector3 unityVec) {
     var mjVec = MjVector3(unityVec);
     mjTarget[0] = mjVec[0];
     mjTarget[1] = mjVec[1];
     mjTarget[2] = mjVec[2];
   }
 
-  // Stores a unity quaternion in a Mujoco target buffer.
-  public static unsafe void SetMjQuaternion(double* mjTarget, Quaternion unityQuat) {
+  public static unsafe void SetMjQuaternion(float* mjTarget, Quaternion unityQuat) {
     var mjQuat = MjQuaternion(unityQuat);
     mjTarget[0] = mjQuat.w;
     mjTarget[1] = mjQuat.x;
@@ -87,34 +68,8 @@ public static class MjEngineTool {
     mjTarget[3] = mjQuat.z;
   }
 
-  // Returns a pointer to an entry in the MuJoCo field that's 3*offsetEntry down the buffer.
-  public static unsafe double* MjVector3AtEntry(double* mjTarget, int offsetEntry) {
-    return mjTarget + offsetEntry * _elementsPerPosition;
-  }
-
-  // Returns a pointer to an entry in the MuJoCo field that's 4*offsetEntry down the buffer.
-  public static unsafe double* MjQuaternionAtEntry(double* mjTarget, int offsetEntry) {
-    return mjTarget + offsetEntry * _elementsPerRotation;
-  }
-
-  // Returns a pointer to an entry in the MuJoCo field that's 7*offsetEntry down the buffer.
-  public static unsafe double* MjTransformAtEntry(double* mjTarget, int offsetEntry) {
-    return mjTarget + offsetEntry * _elementsPerTransform;
-  }
-
-  // Returns a pointer to an entry in the MuJoCo field that's 9*offsetEntry down the buffer.
-  public static unsafe double* MjMatrixAtEntry(double* mjTarget, int offsetEntry) {
-    return mjTarget + offsetEntry * _mjMat.Length;
-  }
-
-  // Returns a pointer to an entry in the MuJoCo field that's 11*offsetEntry down the buffer.
-  public static unsafe double* MjEqualityAtEntry(double* mjTarget, int offsetEntry) {
-    return mjTarget + offsetEntry * _elementsPerEquality;
-  }
-
-  // Stores a unity transform (position+rotation) in a Mujoco target buffer.
   public static unsafe void SetMjTransform(
-      double* mjTarget, Vector3 unityVec, Quaternion unityQuat) {
+      float* mjTarget, Vector3 unityVec, Quaternion unityQuat) {
     var mjVec = MjVector3(unityVec);
     var mjQuat = MjQuaternion(unityQuat);
     mjTarget[0] = mjVec[0];
@@ -126,72 +81,121 @@ public static class MjEngineTool {
     mjTarget[6] = mjQuat.z;
   }
 
-  // Converts a Unity Vector3 to a Mujoco vector.
+  public static unsafe Vector3 UnityVector3(float* mjVector) {
+    return new Vector3(mjVector[0], mjVector[2], mjVector[1]);
+  }
+
+  public static unsafe Quaternion UnityQuaternion(float* mjQuat) {
+    return new Quaternion(
+        x:mjQuat[1], y:mjQuat[3], z:mjQuat[2], w:-mjQuat[0]);
+  }
+
+  // ── Span-based helpers (for MjbFloatSpan arrays from mjb getters) ──────
+
+  public static unsafe Vector3 UnityVector3AtEntry(MjbFloatSpan span, int entryIndex) {
+    float* p = span.Data + entryIndex * _elementsPerPosition;
+    return new Vector3(p[0], p[2], p[1]);
+  }
+
+  public static unsafe Quaternion UnityQuaternionAtEntry(MjbFloatSpan span, int entryIndex) {
+    float* p = span.Data + entryIndex * _elementsPerRotation;
+    return new Quaternion(x:p[1], y:p[3], z:p[2], w:-p[0]);
+  }
+
+  public static unsafe Quaternion UnityQuaternionFromMatrixAtEntry(MjbFloatSpan span, int entryIndex) {
+    float* p = span.Data + entryIndex * 9;
+    return UnityQuaternionFromMatrix(p);
+  }
+
+  public static unsafe void SetMjVector3AtEntry(MjbFloatSpan span, int entryIndex, Vector3 unityVec) {
+    float* p = span.Data + entryIndex * _elementsPerPosition;
+    SetMjVector3(p, unityVec);
+  }
+
+  public static unsafe void SetMjQuaternionAtEntry(MjbFloatSpan span, int entryIndex, Quaternion unityQuat) {
+    float* p = span.Data + entryIndex * _elementsPerRotation;
+    SetMjQuaternion(p, unityQuat);
+  }
+
+  public static unsafe void SetMjTransformAtEntry(MjbFloatSpan span, int entryIndex, Vector3 unityVec, Quaternion unityQuat) {
+    float* p = span.Data + entryIndex * _elementsPerEquality;
+    SetMjTransform(p, unityVec, unityQuat);
+  }
+
+  // ── Mat2Quat (Shepperd's method, replaces mju_mat2Quat) ──────────────
+
+  public static unsafe Quaternion UnityQuaternionFromMatrix(float* mat) {
+    // Shepperd's method: convert 3x3 row-major rotation matrix to quaternion.
+    // mat layout: [m00 m01 m02 m10 m11 m12 m20 m21 m22]
+    float m00 = mat[0], m01 = mat[1], m02 = mat[2];
+    float m10 = mat[3], m11 = mat[4], m12 = mat[5];
+    float m20 = mat[6], m21 = mat[7], m22 = mat[8];
+
+    float trace = m00 + m11 + m22;
+    float w, x, y, z;
+
+    if (trace > 0) {
+      float s = Mathf.Sqrt(trace + 1.0f) * 2.0f;
+      w = 0.25f * s;
+      x = (m21 - m12) / s;
+      y = (m02 - m20) / s;
+      z = (m10 - m01) / s;
+    } else if (m00 > m11 && m00 > m22) {
+      float s = Mathf.Sqrt(1.0f + m00 - m11 - m22) * 2.0f;
+      w = (m21 - m12) / s;
+      x = 0.25f * s;
+      y = (m01 + m10) / s;
+      z = (m02 + m20) / s;
+    } else if (m11 > m22) {
+      float s = Mathf.Sqrt(1.0f + m11 - m00 - m22) * 2.0f;
+      w = (m02 - m20) / s;
+      x = (m01 + m10) / s;
+      y = 0.25f * s;
+      z = (m12 + m21) / s;
+    } else {
+      float s = Mathf.Sqrt(1.0f + m22 - m00 - m11) * 2.0f;
+      w = (m10 - m01) / s;
+      x = (m02 + m20) / s;
+      y = (m12 + m21) / s;
+      z = 0.25f * s;
+    }
+
+    // MuJoCo quat: [w x y z], Unity: Quaternion(x,y,z,w).
+    // Apply MuJoCo→Unity swizzle: (mjX, mjZ, mjY, -mjW)
+    return new Quaternion(x:x, y:z, z:y, w:-w);
+  }
+
+  // ── Pure geometry helpers (no pointer dependencies) ────────────────────
+
   public static Vector3 MjVector3(Vector3 unityVec) {
     return new Vector3(unityVec.x, unityVec.z, unityVec.y);
   }
 
-  // Converts a Mujoco vector to a Unity vector.
-  public static unsafe Vector3 UnityVector3(double* mjVector) {
-    return new Vector3((float)mjVector[0], (float)mjVector[2], (float)mjVector[1]);
-  }
-
-  // Converts a Mujoco vector to a Unity vector.
-  // The vector coordinates are expected to be stored at the 'entryIndex * 3' of the 'coords'
-  // array.
   public static unsafe Vector3 UnityVector3(float[] coords, int entryIndex) {
     var startOffset = entryIndex * _elementsPerPosition;
     return new Vector3(coords[startOffset], coords[startOffset + 2], coords[startOffset + 1]);
   }
 
-  // Converts a Mujoco vector to a Unity vector.
   public static Vector3 UnityVector3(Vector3 mjVector) {
     return new Vector3(mjVector.x, mjVector.z, mjVector.y);
   }
 
-  // Converts a Unity Quaternion to a Mujoco Quaternion
   public static Quaternion MjQuaternion(Quaternion unityQuat) {
     return new Quaternion(w:-unityQuat.w, x:unityQuat.x, y:unityQuat.z, z:unityQuat.y);
   }
 
-  // Converts a Mujoco quaternion to a Unity quaternion.
-  public static unsafe Quaternion UnityQuaternion(double* mjQuat) {
-    return new Quaternion(
-        x:(float)mjQuat[1], y:(float)mjQuat[3], z:(float)mjQuat[2], w:(float)-mjQuat[0]);
-  }
-
-  // Converts a Mujoco quaternion to a Unity quaternion.
   public static Quaternion UnityQuaternion(Quaternion mjQuat) {
-    // This is simply the inverse permutation of the one in MjQuaternion
     return new Quaternion(x:mjQuat.x, y:mjQuat.z, z:mjQuat.y, w:-mjQuat.w);
   }
 
-  // Converts a Mujoco matrix to a Unity quaternion.
-  // The matrix coordinates are at the 'entryIndex * 9' of the 'mjMat' array.
-  public static unsafe Quaternion UnityQuaternionFromMatrix(double* mjMat) {
-    for (var j = 0; j < _mjMat.Length; ++j) {
-      _mjMat[j] = mjMat[j];
-    }
-    fixed (double* q_out = _mjQuat)
-    fixed (double* m_in = _mjMat) {
-      MujocoLib.mju_mat2Quat(q_out, m_in);
-      return UnityQuaternion(q_out);
-    }
-  }
-
-  // Converts a Unity extents Vector3 to a Mujoco extents vector.
-  // Use to convert size vectors that should contain only absolute values.
   public static Vector3 MjExtents(Vector3 unityExtents) {
     return new Vector3(unityExtents.x, unityExtents.z, unityExtents.y);
   }
 
-  // Converts a Mujoco extents vector to a Unity extents Vector3.
-  // Use to convert size vectors that should contain only absolute values.
   public static Vector3 UnityExtents(Vector3 mjExtents) {
     return new Vector3(mjExtents.x, mjExtents.z, mjExtents.y);
   }
 
-  // Converts a vector containing Mujoco Euler angles to a Unity representation.
   public static Vector3 UnityEuler(Vector3 mjEuler) {
     return new Vector3(mjEuler.x, mjEuler.z, -mjEuler.y);
   }
@@ -204,9 +208,6 @@ public static class MjEngineTool {
     return MakeLocaleInvariant($"{quat.w} {quat.x} {quat.y} {quat.z}");
   }
 
-  // We can't use transform.localPosition because we allow arbitrary deep gameObject hierarchies
-  // between MuJoCo parent and child entities.  Therefore, the method takes into account extra
-  // transforms that may be present in the chain separating the component from its parent body.
   public static MjTransformation LocalTransformInParentBody(MjComponent component) {
     var MjParent = MjHierarchyTool.FindParentComponent<MjBaseBody>(component);
     var parentGlobalPosition = Vector3.zero;
@@ -224,18 +225,13 @@ public static class MjEngineTool {
     return new MjTransformation(localPosition, localRotation);
   }
 
-  // Identity quaternion in MujocoLib.
   public static readonly Quaternion MjQuaternionIdentity = new Quaternion(w:-1, x:0, y:0, z:0);
-
-  // Mujoco's Z-axis corresponds to Unity's up (Y) axis.
   public static readonly Vector3 MjVector3Up = new Vector3(0, 0, 1);
 
-  // Sorts the components of a Vector2. Doesn't modify the original vector.
   public static Vector2 GetSorted(Vector2 vec) {
     return new Vector2(Math.Min(vec.x, vec.y), Math.Max(vec.x, vec.y));
   }
 
-  // Converts an array of floats to an Mjcf.
   public static string ArrayToMjcf(float[] array) {
     String ret = "";
     foreach (float entry in array) {
@@ -244,7 +240,6 @@ public static class MjEngineTool {
     return ret.Substring(startIndex:0, length:ret.Length - 1);
   }
 
-  // Converts a list of floats to an Mjcf.
   public static string ListToMjcf(List<float> list) {
     String ret = "";
     foreach (float entry in list) {
@@ -253,13 +248,6 @@ public static class MjEngineTool {
     return ret.Substring(startIndex:0, length:ret.Length - 1);
   }
 
-  // Generates an Mjcf of the specified component's transform.
-  //
-  // It will use the component's position (Vector3) and rotation (Quaternion), relative to its
-  // MjComponent parent, and save them in "pos" and "quat" attributes.
-  //
-  // The method takes into account extra transforms that may be present in the chain separating
-  // the component from its MjComponent parent.
   public static void PositionRotationToMjcf(XmlElement mjcf, MjComponent component) {
     var localTransform = LocalTransformInParentBody(component);
     mjcf.SetAttribute(
@@ -270,15 +258,6 @@ public static class MjEngineTool {
         MjEngineTool.QuaternionToMjcf(MjEngineTool.MjQuaternion(localTransform.Rotation)));
   }
 
-  // Generates an Mjcf of the specified component's transform.
-  //
-  // It will use the component's position (Vector3) and forward direction (Vector3), relative to
-  // its MjComponent parent, and save them in "pos" and "axis" attributes. Designed to work
-  // with Joints, it will set the "ref" attribute to 0, indicating that the joint is in its
-  // reference pose frame.
-  //
-  // The method takes into account extra transforms that may be present in the chain separating
-  // the component from its MjComponent parent.
   public static void PositionAxisToMjcf(XmlElement mjcf, MjComponent component) {
     var localTransform = LocalTransformInParentBody(component);
     var axis = (localTransform.Rotation * Vector3.right).normalized;
@@ -320,7 +299,6 @@ public static class MjEngineTool {
     }
   }
 
-  // Parses the transform-shape specifications, shared by the Geom and Site Mjcfs.
   public static void ParseTransformMjcf(XmlElement mjcf, Transform transform) {
     Vector3 fromPoint, toPoint;
     if (ParseFromToMjcf(mjcf, out fromPoint, out toPoint)) {
@@ -328,7 +306,6 @@ public static class MjEngineTool {
       transform.localRotation = Quaternion.FromToRotation(
           Vector3.up, (toPoint - fromPoint).normalized);
     } else {
-      // Parse the regular transform.
       transform.localPosition = MjEngineTool.UnityVector3(
           mjcf.GetVector3Attribute("pos", defaultValue: Vector3.zero));
       transform.localRotation = Quaternion.identity;
@@ -371,11 +348,9 @@ public static class MjEngineTool {
 
   public static void LoadPlugins() {
     if(!Directory.Exists("Packages/org.mujoco/Runtime/Plugins/")) return;
-
     foreach (string pluginPath in Directory.GetFiles("Packages/org.mujoco/Runtime/Plugins/")) {
-      MujocoLib.mj_loadPluginLibrary(pluginPath);
+      MjbModel.LoadPluginLibrary(pluginPath);
     }
-
   }
 
 }
