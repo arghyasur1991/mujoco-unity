@@ -42,9 +42,11 @@ public class MjScene : MonoBehaviour {
   [Header("Physics Backend")]
   [Tooltip("CPU: MuJoCo C (double, CPU). GPU: MuJoCo-MLX (float32, Metal GPU). " +
            "GPU does physics on Metal, then syncs state back to CPU for rendering.")]
-  public PhysicsBackendType physicsBackend = PhysicsBackendType.CPU;
+  public PhysicsBackendType physicsBackend = PhysicsBackendType.GPU;
 
   private IMjPhysicsBackend _gpuBackend;
+  private MjbBatchedSim _gpuBatchedSim;
+  private MjbModel _gpuModel;
   private MjCpuBackend _cpuBackend;
   private float[] _gpuCtrlBuf;
   private int _subStepsPerFixedUpdate = 1;
@@ -123,6 +125,10 @@ public class MjScene : MonoBehaviour {
   public void ResetData() {
     if (Model == null || Data == null) return;
     Data.ResetData();
+    if (_gpuBatchedSim != null) {
+      var resetMask = new int[] { 1 };
+      _gpuBatchedSim.Reset(resetMask);
+    }
     _gpuBackend?.ResetData();
     Data.Forward();
     _gpuBackend?.Forward();
@@ -212,12 +218,23 @@ public class MjScene : MonoBehaviour {
 
     if (physicsBackend == PhysicsBackendType.GPU) {
       try {
-        _gpuBackend = new MjGpuBackend(mjcf.OuterXml, fromString: true);
+        var gpuBackendHandle = MjbBackend.Create(MjbBackendType.MLX);
+        _gpuModel = gpuBackendHandle.LoadModelFromString(mjcf.OuterXml);
+        var config = new MjbBatchedConfig {
+          numEnvs = 1,
+          footContactsOnly = 0,
+          solverIterations = 0
+        };
+        _gpuBatchedSim = _gpuModel.CreateBatchedSim(config);
         _gpuCtrlBuf = new float[Model.Info.nu];
-        Debug.Log($"MjScene: GPU backend (MuJoCo-MLX) active. nq={_gpuBackend.Nq}, nu={_gpuBackend.Nu}");
+        Debug.Log($"MjScene: GPU backend (compiled Metal pipeline, numEnvs=1). " +
+                  $"nq={Model.Info.nq}, nu={Model.Info.nu}");
       } catch (Exception e) {
         Debug.LogError($"MjScene: GPU backend creation failed, falling back to CPU: {e.Message}");
-        _gpuBackend = null;
+        _gpuBatchedSim?.Dispose();
+        _gpuBatchedSim = null;
+        _gpuModel?.Dispose();
+        _gpuModel = null;
         _gpuCtrlBuf = null;
       }
     }
@@ -303,6 +320,10 @@ public class MjScene : MonoBehaviour {
 
   public void DestroyScene() {
     preDestroyEvent?.Invoke(this, new MjStepArgs(Model, Data));
+    _gpuBatchedSim?.Dispose();
+    _gpuBatchedSim = null;
+    _gpuModel?.Dispose();
+    _gpuModel = null;
     _gpuBackend?.Dispose();
     _gpuBackend = null;
     _gpuCtrlBuf = null;
@@ -323,20 +344,20 @@ public class MjScene : MonoBehaviour {
     Profiler.BeginSample("MjStep");
     Profiler.BeginSample("MjStep.mj_step");
 
-    if (_gpuBackend != null) {
+    if (_gpuBatchedSim != null) {
       var ctrl = Data.GetCtrl();
       int nu = ctrl.Length;
       for (int i = 0; i < nu; i++) _gpuCtrlBuf[i] = ctrl[i];
-      _gpuBackend.SetCtrl(_gpuCtrlBuf);
-      _gpuBackend.Step();
 
-      var qpos = _gpuBackend.GetQpos();
-      var qvel = _gpuBackend.GetQvel();
-      float[] qposArr = qpos.ToArray();
-      float[] qvelArr = qvel.ToArray();
+      for (int i = 0; i < _subStepsPerFixedUpdate; i++)
+        _gpuBatchedSim.Step(_gpuCtrlBuf);
+
+      // Batched sim returns [1*nq] and [1*nv] — consume each before the next.
+      float[] qposArr = _gpuBatchedSim.GetQpos().ToArray();
+      float[] qvelArr = _gpuBatchedSim.GetQvel().ToArray();
       Data.SetQpos(qposArr);
       Data.SetQvel(qvelArr);
-      Data.Forward();
+      Data.Kinematics();
     } else if (ctrlCallback != null) {
       Data.Step1();
       ctrlCallback?.Invoke(this, new MjStepArgs(Model, Data));
@@ -349,7 +370,7 @@ public class MjScene : MonoBehaviour {
     }
     Profiler.EndSample(); // MjStep.mj_step
 
-    if (_gpuBackend == null)
+    if (_gpuBatchedSim == null)
       CheckForPhysicsException();
 
     Profiler.BeginSample("MjStep.OnSyncState");
