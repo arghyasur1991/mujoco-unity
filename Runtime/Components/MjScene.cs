@@ -42,7 +42,7 @@ public class MjScene : MonoBehaviour {
   [Header("Physics Backend")]
   [Tooltip("CPU: MuJoCo C (double, CPU). GPU: MuJoCo-MLX (float32, Metal GPU). " +
            "GPU does physics on Metal, then syncs state back to CPU for rendering.")]
-  public PhysicsBackendType physicsBackend = PhysicsBackendType.GPU;
+  public PhysicsBackendType physicsBackend = PhysicsBackendType.CPU;
 
   private IMjPhysicsBackend _backend;
   private bool _isGpuBackend;
@@ -328,16 +328,26 @@ public class MjScene : MonoBehaviour {
     Profiler.BeginSample("MjStep.mj_step");
 
     if (_isGpuBackend) {
+      Profiler.BeginSample("MjStep.CtrlCopy");
       var ctrl = Data.GetCtrl();
       _backend.SetCtrl(ctrl.ToArray());
+      Profiler.EndSample();
+
+      Profiler.BeginSample("MjStep.GpuPhysics");
       for (int i = 0; i < _subStepsPerFixedUpdate; i++)
         _backend.Step();
+      Profiler.EndSample();
 
+      Profiler.BeginSample("MjStep.GpuStateSync");
       float[] qposArr = _backend.GetQpos().ToArray();
       float[] qvelArr = _backend.GetQvel().ToArray();
       Data.SetQpos(qposArr);
       Data.SetQvel(qvelArr);
+      Profiler.EndSample();
+
+      Profiler.BeginSample("MjStep.CpuKinematics");
       Data.Kinematics();
+      Profiler.EndSample();
     } else if (ctrlCallback != null) {
       Data.Step1();
       ctrlCallback?.Invoke(this, new MjStepArgs(Model, Data));
