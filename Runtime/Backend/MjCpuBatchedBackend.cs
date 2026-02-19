@@ -40,9 +40,9 @@ namespace Mujoco.Mjb
 
             var config = new MjbBatchedConfig
             {
-                num_envs = numEnvs,
-                num_steps = 1,
-                use_compiled = 0
+                numEnvs = numEnvs,
+                footContactsOnly = 0,
+                solverIterations = 0
             };
             _sim = _model.CreateBatchedSim(config);
         }
