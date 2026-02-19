@@ -72,17 +72,17 @@ public class MjGeom : MjShapeComponent {
   }
 
   public override void OnSyncState(MjbData data) {
-    var geomXpos = data.GetGeomXpos();
-    var geomXmat = data.GetGeomXmat();
+    // Each Get*() call reuses the same native float buffer (fbuf), so we must
+    // consume each span before calling the next getter.
     if (ShapeType == ShapeTypes.Mesh) {
-      _geomInGlobalFrame.Set(
-          translation: MjEngineTool.UnityVector3AtEntry(geomXpos, MujocoId),
-          rotation: MjEngineTool.UnityQuaternionFromMatrixAtEntry(geomXmat, MujocoId));
+      var pos = MjEngineTool.UnityVector3AtEntry(data.GetGeomXpos(), MujocoId);
+      var rot = MjEngineTool.UnityQuaternionFromMatrixAtEntry(data.GetGeomXmat(), MujocoId);
+      _geomInGlobalFrame.Set(translation: pos, rotation: rot);
       var comInGlobalFrame = _geomInGlobalFrame * _comTransform;
       comInGlobalFrame.StoreGlobal(transform);
     } else {
-      transform.position = MjEngineTool.UnityVector3AtEntry(geomXpos, MujocoId);
-      transform.rotation = MjEngineTool.UnityQuaternionFromMatrixAtEntry(geomXmat, MujocoId);
+      transform.position = MjEngineTool.UnityVector3AtEntry(data.GetGeomXpos(), MujocoId);
+      transform.rotation = MjEngineTool.UnityQuaternionFromMatrixAtEntry(data.GetGeomXmat(), MujocoId);
     }
   }
 
