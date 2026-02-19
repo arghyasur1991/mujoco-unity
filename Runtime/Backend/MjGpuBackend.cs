@@ -131,6 +131,12 @@ namespace Mujoco.Mjb
 
         public void Step() => _sim.Step(_ctrlBuf);
 
+        /// <summary>
+        /// Evaluate qpos + qvel in a single GPU fence. Call before GetQpos/GetQvel
+        /// to replace two separate mx::eval() calls with one combined GPU sync.
+        /// </summary>
+        public void EvalState() => _sim.EvalState();
+
         public void Forward()
         {
             // The batched pipeline computes all derived quantities as part of step/reset.

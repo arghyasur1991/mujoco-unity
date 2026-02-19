@@ -43,6 +43,17 @@ namespace Mujoco.Mjb
         }
 
         /// <summary>
+        /// Evaluate qpos and qvel in a single GPU fence.
+        /// Call before GetQpos/GetQvel to avoid two sequential GPU syncs.
+        /// No-op for CPU backend (state is always materialized).
+        /// </summary>
+        public void EvalState()
+        {
+            ThrowIfDisposed();
+            MjbNativeMethods.mjb_batched_eval_state(Handle);
+        }
+
+        /// <summary>
         /// Reset environments where mask[i] != 0.
         /// </summary>
         public unsafe void Reset(int[] resetMask)

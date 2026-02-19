@@ -51,6 +51,18 @@ namespace Mujoco.Mjb
                 arr[i] = Data[i];
             return arr;
         }
+
+        /// <summary>
+        /// Copy into a pre-allocated buffer. Zero allocation — use for hot paths.
+        /// Copies min(Length, dest.Length) elements.
+        /// </summary>
+        public unsafe void CopyTo(float[] dest)
+        {
+            if (dest == null || Length == 0) return;
+            int n = Length < dest.Length ? Length : dest.Length;
+            fixed (float* p = dest)
+                Buffer.MemoryCopy(Data, p, (long)dest.Length * sizeof(float), (long)n * sizeof(float));
+        }
     }
 
     /// <summary>

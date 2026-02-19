@@ -323,6 +323,10 @@ namespace Mujoco.Mjb
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
         public static extern float* mjb_batched_get_cfrc_ext(IntPtr sim, int* nOut);
 
+        // Evaluate qpos + qvel in a single GPU fence. No-op for CPU backend.
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void mjb_batched_eval_state(IntPtr sim);
+
         // ── Differentiable simulation (MLX backend only) ────────────────
 
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]

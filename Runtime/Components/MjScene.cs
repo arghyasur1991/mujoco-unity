@@ -15,6 +15,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.Linq;
@@ -42,11 +43,20 @@ public class MjScene : MonoBehaviour {
   [Header("Physics Backend")]
   [Tooltip("CPU: MuJoCo C (double, CPU). GPU: MuJoCo-MLX (float32, Metal GPU). " +
            "GPU does physics on Metal, then syncs state back to CPU for rendering.")]
-  public PhysicsBackendType physicsBackend = PhysicsBackendType.CPU;
+  public PhysicsBackendType physicsBackend = PhysicsBackendType.GPU;
 
   private IMjPhysicsBackend _backend;
   private bool _isGpuBackend;
   private int _subStepsPerFixedUpdate = 1;
+
+  // Pre-allocated GPU state transfer buffers (zero allocation on hot path)
+  private float[] _gpuQposBuf;
+  private float[] _gpuQvelBuf;
+  private float[] _gpuCtrlBuf;
+
+  // Wall-clock timing for GPU path diagnostics (logged every 60 frames)
+  private int _gpuFrameCount;
+  private double _gpuTimingCtrl, _gpuTimingPhysics, _gpuTimingSync, _gpuTimingKin;
 
   public IMjPhysicsBackend PhysicsBackend => _backend;
 
@@ -123,10 +133,11 @@ public class MjScene : MonoBehaviour {
     Data.ResetData();
     _backend?.ResetData();
     if (_isGpuBackend) {
-      float[] qpos = _backend.GetQpos().ToArray();
-      float[] qvel = _backend.GetQvel().ToArray();
-      Data.SetQpos(qpos);
-      Data.SetQvel(qvel);
+      (_backend as MjGpuBackend)?.EvalState();
+      _backend.GetQpos().CopyTo(_gpuQposBuf);
+      _backend.GetQvel().CopyTo(_gpuQvelBuf);
+      Data.SetQpos(_gpuQposBuf);
+      Data.SetQvel(_gpuQvelBuf);
     }
     Data.Forward();
     _lastWarningCounts = null;
@@ -208,6 +219,12 @@ public class MjScene : MonoBehaviour {
                 $"(MuJoCo dt={mjTimestep}s, Unity fixedDt={Time.fixedDeltaTime}s)");
     }
 
+    // Pre-allocate GPU state transfer buffers
+    var info = Model.Info;
+    _gpuQposBuf = new float[info.nq];
+    _gpuQvelBuf = new float[info.nv];
+    _gpuCtrlBuf = new float[info.nu];
+
     foreach (var component in components) {
       component.BindToRuntime(Model, Data);
     }
@@ -216,8 +233,26 @@ public class MjScene : MonoBehaviour {
       try {
         _backend = new MjGpuBackend(mjcf.OuterXml, fromString: true);
         _isGpuBackend = true;
-        Debug.Log($"MjScene: GPU backend (compiled Metal pipeline). " +
-                  $"nq={Model.Info.nq}, nu={Model.Info.nu}");
+
+        // For GPU play-mode verification: force single substep with effective dt=fixedDeltaTime.
+        // This reduces Metal dispatches/frame from 7 to 1, making frame times tractable.
+        _backend.Timestep = Time.fixedDeltaTime;
+        _subStepsPerFixedUpdate = 1;
+        Debug.Log($"MjScene: GPU backend (compiled Metal pipeline) — " +
+                  $"1 substep, effective dt={Time.fixedDeltaTime}s, " +
+                  $"nq={info.nq}, nu={info.nu}");
+
+        // Front-load Metal JIT: triggers mx::compile() + Metal shader compilation now
+        // so the first FixedUpdate does not freeze for seconds.
+        Debug.Log("MjScene: GPU warmup (Metal JIT compilation)...");
+        var t0 = Stopwatch.GetTimestamp();
+        _backend.Step();
+        _backend.GetQpos();  // forces mx::eval() → compiles Metal shaders
+        _backend.ResetData();
+        double warmupMs = (Stopwatch.GetTimestamp() - t0) * 1000.0 / Stopwatch.Frequency;
+        Debug.Log($"MjScene: GPU warmup done in {warmupMs:F0}ms");
+        _gpuFrameCount = 0;
+        _gpuTimingCtrl = _gpuTimingPhysics = _gpuTimingSync = _gpuTimingKin = 0;
       } catch (Exception e) {
         Debug.LogError($"MjScene: GPU backend creation failed, falling back to CPU: {e.Message}");
         _backend = new MjCpuBackend(Model, Data);
@@ -312,6 +347,7 @@ public class MjScene : MonoBehaviour {
     _backend?.Dispose();
     _backend = null;
     _isGpuBackend = false;
+    _gpuQposBuf = _gpuQvelBuf = _gpuCtrlBuf = null;
     Data?.Dispose();
     Data = null;
     Model?.Dispose();
@@ -328,26 +364,51 @@ public class MjScene : MonoBehaviour {
     Profiler.BeginSample("MjStep.mj_step");
 
     if (_isGpuBackend) {
+      long t0;
+
       Profiler.BeginSample("MjStep.CtrlCopy");
-      var ctrl = Data.GetCtrl();
-      _backend.SetCtrl(ctrl.ToArray());
+      t0 = Stopwatch.GetTimestamp();
+      Data.GetCtrl().CopyTo(_gpuCtrlBuf);
+      _backend.SetCtrl(_gpuCtrlBuf);
+      _gpuTimingCtrl += GpuMs(t0);
       Profiler.EndSample();
 
       Profiler.BeginSample("MjStep.GpuPhysics");
+      t0 = Stopwatch.GetTimestamp();
       for (int i = 0; i < _subStepsPerFixedUpdate; i++)
         _backend.Step();
+      _gpuTimingPhysics += GpuMs(t0);
       Profiler.EndSample();
 
       Profiler.BeginSample("MjStep.GpuStateSync");
-      float[] qposArr = _backend.GetQpos().ToArray();
-      float[] qvelArr = _backend.GetQvel().ToArray();
-      Data.SetQpos(qposArr);
-      Data.SetQvel(qvelArr);
+      t0 = Stopwatch.GetTimestamp();
+      // Single GPU fence for both arrays, then zero-alloc copy into pre-allocated buffers.
+      (_backend as MjGpuBackend)?.EvalState();
+      _backend.GetQpos().CopyTo(_gpuQposBuf);
+      _backend.GetQvel().CopyTo(_gpuQvelBuf);
+      Data.SetQpos(_gpuQposBuf);
+      Data.SetQvel(_gpuQvelBuf);
+      _gpuTimingSync += GpuMs(t0);
       Profiler.EndSample();
 
       Profiler.BeginSample("MjStep.CpuKinematics");
+      t0 = Stopwatch.GetTimestamp();
       Data.Kinematics();
+      _gpuTimingKin += GpuMs(t0);
       Profiler.EndSample();
+
+      // Log per-phase wall-clock averages every 60 frames
+      _gpuFrameCount++;
+      if (_gpuFrameCount % 60 == 0) {
+        double inv = 1.0 / 60;
+        UnityEngine.Debug.Log(
+            $"MjScene GPU [60f avg]: " +
+            $"CtrlCopy={_gpuTimingCtrl * inv:F2}ms  " +
+            $"GpuPhysics={_gpuTimingPhysics * inv:F2}ms  " +
+            $"StateSync={_gpuTimingSync * inv:F2}ms  " +
+            $"Kinematics={_gpuTimingKin * inv:F2}ms");
+        _gpuTimingCtrl = _gpuTimingPhysics = _gpuTimingSync = _gpuTimingKin = 0;
+      }
     } else if (ctrlCallback != null) {
       Data.Step1();
       ctrlCallback?.Invoke(this, new MjStepArgs(Model, Data));
@@ -368,6 +429,9 @@ public class MjScene : MonoBehaviour {
     Profiler.EndSample(); // MjStep.OnSyncState
     Profiler.EndSample(); // MjStep
   }
+
+  private static double GpuMs(long start) =>
+      (Stopwatch.GetTimestamp() - start) * 1000.0 / Stopwatch.Frequency;
 
   private static readonly string[] _warningMessages = {
       "INERTIA: (Near-) Singular inertia matrix.",
