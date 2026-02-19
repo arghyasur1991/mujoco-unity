@@ -125,6 +125,7 @@ public class MjScene : MonoBehaviour {
     _gpuBackend?.ResetData();
     Data.Forward();
     _gpuBackend?.Forward();
+    _lastWarningCounts = null;
     SyncUnityToMjState();
     postInitEvent?.Invoke(this, new MjStepArgs(Model, Data));
   }
@@ -195,6 +196,7 @@ public class MjScene : MonoBehaviour {
     }
 
     _cpuBackend = new MjCpuBackend(Model, Data);
+    _lastWarningCounts = null;
 
     foreach (var component in components) {
       component.BindToRuntime(Model, Data);
@@ -345,20 +347,26 @@ public class MjScene : MonoBehaviour {
     Profiler.EndSample(); // MjStep
   }
 
+  private static readonly string[] _warningMessages = {
+      "INERTIA: (Near-) Singular inertia matrix.",
+      "CONTACTFULL: nconmax isn't sufficient.",
+      "CNSTRFULL: njmax isn't sufficient.",
+      "VGEOMFULL: who constructed a mjvScene?!",
+      "BADQPOS: NaN/inf in qpos.",
+      "BADQVEL: NaN/inf in qvel.",
+      "BADQACC: NaN/inf in qacc.",
+      "BADCTRL: NaN/inf in ctrl.",
+  };
+  private int[] _lastWarningCounts;
+
   private void CheckForPhysicsException() {
-    string[] warnings = {
-        "INERTIA: (Near-) Singular inertia matrix.",
-        "CONTACTFULL: nconmax isn't sufficient.",
-        "CNSTRFULL: njmax isn't sufficient.",
-        "VGEOMFULL: who constructed a mjvScene?!",
-        "BADQPOS: NaN/inf in qpos.",
-        "BADQVEL: NaN/inf in qvel.",
-        "BADQACC: NaN/inf in qacc.",
-        "BADCTRL: NaN/inf in ctrl.",
-    };
-    for (int i = 0; i < warnings.Length; i++) {
-      if (Data.GetWarningCount(i) > 0) {
-        throw new PhysicsRuntimeException(warnings[i]);
+    if (_lastWarningCounts == null)
+      _lastWarningCounts = new int[_warningMessages.Length];
+    for (int i = 0; i < _warningMessages.Length; i++) {
+      int count = Data.GetWarningCount(i);
+      if (count > _lastWarningCounts[i]) {
+        _lastWarningCounts[i] = count;
+        throw new PhysicsRuntimeException(_warningMessages[i]);
       }
     }
   }
