@@ -18,7 +18,7 @@ using UnityEditor;
 using UnityEngine;
 using Mujoco.Mjb;
 
-namespace Mujoco.Editor
+namespace Mujoco.Tools
 {
     /// <summary>
     /// Offline GPU correctness verification tool.
