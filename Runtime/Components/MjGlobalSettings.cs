@@ -156,7 +156,11 @@ public struct MjSizeStruct {
 [Serializable]
 public struct MjOptionStruct {
 
-  // "timestep" and "gravity" come from global settings.
+  [Tooltip("MuJoCo simulation timestep in seconds. Use a small value (e.g. 0.002) for stability. " +
+           "MjScene sub-steps automatically to match Unity's fixedDeltaTime.")]
+  public float Timestep;
+  [Tooltip("Gravity vector in MuJoCo coordinates (will be set from Unity Physics.gravity by default).")]
+  public Vector3 Gravity;
   [Tooltip("Ratio of frictional-to-normal constraint impedance.")]
   public float ImpRatio;
   [Tooltip("Global magnetic flux used by magnetometer sensors.")]
@@ -198,6 +202,8 @@ public struct MjOptionStruct {
 
   // Default values copied from the "XML reference" page in the MuJoCo documentation.
   public static MjOptionStruct Default = new MjOptionStruct() {
+    Timestep = 0.002f,
+    Gravity = new Vector3(0.0f, -9.81f, 0.0f),
     ImpRatio = 1.0f,
     Magnetic = Vector3.zero,
     Wind = new Vector3(0.0f, 0.0f, 0.0f),
@@ -220,22 +226,12 @@ public struct MjOptionStruct {
   };
 
   public void ParseMjcf(XmlElement mjcf) {
-    if (mjcf.HasAttribute("timestep")) {
-      var mjTimestep = mjcf.GetFloatAttribute("timestep", Time.fixedDeltaTime);
-      if (mjTimestep != Time.fixedDeltaTime) {
-        Debug.unityLogger.LogWarning(
-            "MuJoCo",
-            $"MuJoCo's timestep ({mjTimestep}s) ignored, please set fixedDeltaTime manually.",
-            null);
-      }
-    }
+    Timestep = mjcf.GetFloatAttribute("timestep", Default.Timestep);
     if (mjcf.HasAttribute("gravity")) {
       var mjGravity = mjcf.GetVector3Attribute("gravity", Vector3.zero);
-      Debug.unityLogger.LogWarning(
-          "MuJoCo",
-          $"MuJoCo's gravity ({mjGravity.x} {mjGravity.z} {mjGravity.y}) ignored, " +
-          "please set gravity in the Physics Manager.",
-          null);
+      Gravity = new Vector3(mjGravity.x, mjGravity.z, mjGravity.y);
+    } else {
+      Gravity = Default.Gravity;
     }
     var localDefault = MjOptionStruct.Default;
     ImpRatio = mjcf.GetFloatAttribute("impratio", localDefault.ImpRatio);
@@ -270,6 +266,9 @@ public struct MjOptionStruct {
   }
 
   public XmlElement ToMjcf(XmlElement mjcf) {
+    mjcf.SetAttribute("timestep", MjEngineTool.MakeLocaleInvariant($"{Timestep}"));
+    var mjGrav = MjEngineTool.MjVector3(Gravity);
+    mjcf.SetAttribute("gravity", MjEngineTool.MakeLocaleInvariant($"{mjGrav.x} {mjGrav.y} {mjGrav.z}"));
     mjcf.SetAttribute("impratio", MjEngineTool.MakeLocaleInvariant($"{ImpRatio}"));
 
     mjcf.SetAttribute("magnetic", MjEngineTool.MakeLocaleInvariant($"{Magnetic.x} {Magnetic.y} {Magnetic.z}"));

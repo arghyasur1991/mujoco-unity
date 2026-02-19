@@ -47,6 +47,7 @@ public class MjScene : MonoBehaviour {
   private IMjPhysicsBackend _gpuBackend;
   private MjCpuBackend _cpuBackend;
   private float[] _gpuCtrlBuf;
+  private int _subStepsPerFixedUpdate = 1;
 
   public IMjPhysicsBackend GpuBackend => _gpuBackend;
   public IMjPhysicsBackend CpuPhysicsBackend => _cpuBackend;
@@ -198,6 +199,13 @@ public class MjScene : MonoBehaviour {
     _cpuBackend = new MjCpuBackend(Model, Data);
     _lastWarningCounts = null;
 
+    float mjTimestep = Model.Timestep;
+    _subStepsPerFixedUpdate = Mathf.Max(1, Mathf.RoundToInt(Time.fixedDeltaTime / mjTimestep));
+    if (_subStepsPerFixedUpdate > 1) {
+      Debug.Log($"MjScene: sub-stepping {_subStepsPerFixedUpdate}x " +
+                $"(MuJoCo dt={mjTimestep}s, Unity fixedDt={Time.fixedDeltaTime}s)");
+    }
+
     foreach (var component in components) {
       component.BindToRuntime(Model, Data);
     }
@@ -333,8 +341,11 @@ public class MjScene : MonoBehaviour {
       Data.Step1();
       ctrlCallback?.Invoke(this, new MjStepArgs(Model, Data));
       Data.Step2();
+      for (int i = 1; i < _subStepsPerFixedUpdate; i++)
+        Data.Step();
     } else {
-      Data.Step();
+      for (int i = 0; i < _subStepsPerFixedUpdate; i++)
+        Data.Step();
     }
     Profiler.EndSample(); // MjStep.mj_step
 

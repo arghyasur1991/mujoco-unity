@@ -81,14 +81,13 @@ public class MjcfGenerationContext {
     var compilerMjcf = (XmlElement)mjcf.AppendChild(doc.CreateElement("compiler"));
     compilerMjcf.SetAttribute("coordinate", "local");
 
-    var optionMjcf = (XmlElement)mjcf.AppendChild(doc.CreateElement("option"));
-    optionMjcf.SetAttribute(
-        "gravity", MjEngineTool.Vector3ToMjcf(MjEngineTool.MjVector3(Physics.gravity)));
-    optionMjcf.SetAttribute("timestep", MjEngineTool.MakeLocaleInvariant($"{Time.fixedDeltaTime}"));
-
     var settings = MjGlobalSettings.Instance;
     if (settings) {
       settings.GlobalsToMjcf(mjcf);
+    } else {
+      var optionMjcf = (XmlElement)mjcf.AppendChild(doc.CreateElement("option"));
+      optionMjcf.SetAttribute(
+          "gravity", MjEngineTool.Vector3ToMjcf(MjEngineTool.MjVector3(Physics.gravity)));
     }
   }
 
