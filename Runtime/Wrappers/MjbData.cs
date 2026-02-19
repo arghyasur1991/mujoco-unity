@@ -334,28 +334,28 @@ namespace Mujoco.Mjb
 
         // Int data getters return raw pointers (tendon wrapping)
 
-        public unsafe (int* data, int length) GetTenWrapadr()
+        public unsafe void GetTenWrapadr(out int* data, out int length)
         {
             ThrowIfDisposed();
             int n;
-            int* ptr = MjbNativeMethods.mjb_get_ten_wrapadr(Handle, &n);
-            return (ptr, n);
+            data = MjbNativeMethods.mjb_get_ten_wrapadr(Handle, &n);
+            length = n;
         }
 
-        public unsafe (int* data, int length) GetTenWrapnum()
+        public unsafe void GetTenWrapnum(out int* data, out int length)
         {
             ThrowIfDisposed();
             int n;
-            int* ptr = MjbNativeMethods.mjb_get_ten_wrapnum(Handle, &n);
-            return (ptr, n);
+            data = MjbNativeMethods.mjb_get_ten_wrapnum(Handle, &n);
+            length = n;
         }
 
-        public unsafe (int* data, int length) GetWrapObj()
+        public unsafe void GetWrapObj(out int* data, out int length)
         {
             ThrowIfDisposed();
             int n;
-            int* ptr = MjbNativeMethods.mjb_get_wrap_obj(Handle, &n);
-            return (ptr, n);
+            data = MjbNativeMethods.mjb_get_wrap_obj(Handle, &n);
+            length = n;
         }
 
         // ── Per-index state setters ─────────────────────────────────

@@ -21,6 +21,7 @@ using System.Xml;
 using UnityEditor;
 #endif
 using UnityEngine;
+using Mujoco.Mjb;
 
 namespace Mujoco {
 [Serializable]
@@ -116,32 +117,32 @@ public class MjSpatialTendon : MjBaseTendon {
 #if UNITY_EDITOR
   public unsafe void OnDrawGizmosSelected() {
     if (Application.isPlaying && MjScene.InstanceExists) {
-      // Lifted from src/engine/engine_vis_visualize.c
       var d = MjScene.Instance.Data;
       var m = MjScene.Instance.Model;
       int i = MujocoId;
-      double sz;
-      for (int j = d->ten_wrapadr[i]; j < d->ten_wrapadr[i] + d->ten_wrapnum[i] - 1; j++) {
-        // Skip drawing of pulley (-2):
-        if (d->wrap_obj[j] != -2 && d->wrap_obj[j + 1] != -2) {
-          // determine width: smaller for segments inside wrapping objects
-          if (d->wrap_obj[j] >= 0 && d->wrap_obj[j + 1] >= 0) {
-            sz = 0.5 * m->tendon_width[i];
-          } else {
-            sz = m->tendon_width[i];
-          }
+      float sz;
 
-          var startPos = MjEngineTool.UnityVector3(d->wrap_xpos + 3 * j);
-          var endPos = MjEngineTool.UnityVector3(d->wrap_xpos + 3 * j + 3);
+      int* tenWrapadr; int tenWrapadrLen;
+      d.GetTenWrapadr(out tenWrapadr, out tenWrapadrLen);
+      int* tenWrapnum; int tenWrapnumLen;
+      d.GetTenWrapnum(out tenWrapnum, out tenWrapnumLen);
+      int* wrapObj; int wrapObjLen;
+      d.GetWrapObj(out wrapObj, out wrapObjLen);
+      var wrapXpos = d.GetWrapXpos();
+      float tenWidth = m.TendonWidth(i);
 
-          // Construct line
-          // At the moment we use handles instead of Gizmos (to be able to set width).
-          // This means rendering won't be performed outside editor; We could implement a "TendonRenderer" component
-          // (added using a context tool) that uses a LineRenderer. Then we could have nice features such as updating
-          // tendon colors or width based on length or tension. That would also allow in-build rendering.
-          Handles.color = Color.magenta;  // Currently we ignore tendon material.
+      int start = tenWrapadr[i];
+      int count = tenWrapnum[i];
+      for (int j = start; j < start + count - 1; j++) {
+        if (wrapObj[j] != -2 && wrapObj[j + 1] != -2) {
+          sz = (wrapObj[j] >= 0 && wrapObj[j + 1] >= 0) ? 0.5f * tenWidth : tenWidth;
+
+          var startPos = MjEngineTool.UnityVector3(wrapXpos.Data + 3 * j);
+          var endPos = MjEngineTool.UnityVector3(wrapXpos.Data + 3 * (j + 1));
+
+          Handles.color = Color.magenta;
           #if UNITY_2020_2_OR_NEWER
-          Handles.DrawLine(startPos, endPos, (float)sz/0.003f);  // Handle width in UI points. We map the default width to 1 pixel.
+          Handles.DrawLine(startPos, endPos, sz / 0.003f);
           #else
           Handles.DrawLine(startPos, endPos);
           #endif
