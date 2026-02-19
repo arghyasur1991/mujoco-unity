@@ -91,6 +91,8 @@ namespace Mujoco.Mjb
         private static string LibName(string baseName) => baseName + ".so";
 #endif
 
+        // libmjb dynamically links against libmujoco (@loader_path/libmujoco.dylib).
+        // We pre-load libmujoco with RTLD_GLOBAL so it's available when libmjb loads.
         private static readonly string[] RequiredLibs = new[]
         {
             "libmujoco",
