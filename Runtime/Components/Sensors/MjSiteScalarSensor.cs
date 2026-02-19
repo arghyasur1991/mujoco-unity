@@ -16,6 +16,7 @@ using System;
 using System.Linq;
 using System.Xml;
 using UnityEngine;
+using Mujoco.Mjb;
 
 namespace Mujoco {
 
@@ -47,8 +48,8 @@ public class MjSiteScalarSensor : MjBaseSensor {
     Site = mjcf.GetObjectReferenceAttribute<MjSite>("site");
   }
 
-  public override unsafe void OnSyncState(MujocoLib.mjData_* data) {
-    SensorReading = data->sensordata[_sensorAddress];
+  public override void OnSyncState(MjbData data) {
+    SensorReading = data.GetSensordata()[_sensorAddress];
   }
 }
 }

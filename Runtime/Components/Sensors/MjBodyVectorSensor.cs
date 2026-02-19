@@ -16,6 +16,7 @@ using System;
 using System.Linq;
 using System.Xml;
 using UnityEngine;
+using Mujoco.Mjb;
 
 namespace Mujoco {
 
@@ -70,8 +71,8 @@ public class MjBodyVectorSensor : MjBaseSensor {
     }
   }
 
-  public override unsafe void OnSyncState(MujocoLib.mjData_* data) {
-    SensorReading = MjEngineTool.UnityVector3(data->sensordata + _sensorAddress);
+  public override unsafe void OnSyncState(MjbData data) {
+    SensorReading = MjEngineTool.UnityVector3(data.GetSensordata().Data + _sensorAddress);
   }
 }
 }

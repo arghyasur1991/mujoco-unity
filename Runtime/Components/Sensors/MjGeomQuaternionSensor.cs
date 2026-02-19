@@ -16,6 +16,7 @@ using System;
 using System.Linq;
 using System.Xml;
 using UnityEngine;
+using Mujoco.Mjb;
 
 namespace Mujoco {
 public class MjGeomQuaternionSensor : MjBaseSensor {
@@ -40,8 +41,8 @@ public class MjGeomQuaternionSensor : MjBaseSensor {
     }
   }
 
-  public override unsafe void OnSyncState(MujocoLib.mjData_* data) {
-    SensorReading = MjEngineTool.UnityQuaternion(data->sensordata + _sensorAddress);
+  public override unsafe void OnSyncState(MjbData data) {
+    SensorReading = MjEngineTool.UnityQuaternion(data.GetSensordata().Data + _sensorAddress);
   }
 }
 }

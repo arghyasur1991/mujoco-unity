@@ -16,6 +16,7 @@ using System;
 using System.Linq;
 using System.Xml;
 using UnityEngine;
+using Mujoco.Mjb;
 
 namespace Mujoco {
 
@@ -42,9 +43,9 @@ public abstract class MjBaseSensor : MjComponent {
   [AbsoluteValue]
   public float Cutoff = 0.0f;
 
-  public override MujocoLib.mjtObj ObjectType => MujocoLib.mjtObj.mjOBJ_SENSOR;
+  public override mjtObj ObjectType => mjtObj.mjOBJ_SENSOR;
 
-  // Address of the sensor, that can be used to index into MujocoLib.mjData_.sensordata.
+  // Address of the sensor, used to index into MjbData.GetSensordata().
   protected int _sensorAddress;
 
   // Parse the component settings from an external Mjcf.
@@ -61,8 +62,8 @@ public abstract class MjBaseSensor : MjComponent {
   }
 
   // Perform bind time initialization of the component.
-  protected override unsafe void OnBindToRuntime(MujocoLib.mjModel_* model, MujocoLib.mjData_* data) {
-    _sensorAddress = model->sensor_adr[MujocoId];
+  protected override void OnBindToRuntime(MjbModel model, MjbData data) {
+    _sensorAddress = model.SensorAdr(MujocoId);
   }
 
   // Create the implementation dependent Mjcf node.
