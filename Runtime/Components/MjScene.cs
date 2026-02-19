@@ -23,6 +23,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Xml;
 using UnityEngine;
+using Debug = UnityEngine.Debug;
 using UnityEngine.Profiling;
 using Mujoco.Mjb;
 
@@ -43,7 +44,7 @@ public class MjScene : MonoBehaviour {
   [Header("Physics Backend")]
   [Tooltip("CPU: MuJoCo C (double, CPU). GPU: MuJoCo-MLX (float32, Metal GPU). " +
            "GPU does physics on Metal, then syncs state back to CPU for rendering.")]
-  public PhysicsBackendType physicsBackend = PhysicsBackendType.GPU;
+  public PhysicsBackendType physicsBackend = PhysicsBackendType.CPU;
 
   private IMjPhysicsBackend _backend;
   private bool _isGpuBackend;
@@ -238,9 +239,10 @@ public class MjScene : MonoBehaviour {
         // This reduces Metal dispatches/frame from 7 to 1, making frame times tractable.
         _backend.Timestep = Time.fixedDeltaTime;
         _subStepsPerFixedUpdate = 1;
-        Debug.Log($"MjScene: GPU backend (compiled Metal pipeline) — " +
-                  $"1 substep, effective dt={Time.fixedDeltaTime}s, " +
-                  $"nq={info.nq}, nu={info.nu}");
+        Debug.Log($"MjScene: GPU backend active — 1 substep @ dt={Time.fixedDeltaTime}s, " +
+                  $"nq={info.nq}, nu={info.nu}. " +
+                  $"NOTE: numEnvs=1 GPU has ~112ms fixed Metal overhead per step (~7fps). " +
+                  $"Use CPU backend for smooth play mode; GPU is optimal at numEnvs>=64 in training.");
 
         // Front-load Metal JIT: triggers mx::compile() + Metal shader compilation now
         // so the first FixedUpdate does not freeze for seconds.
