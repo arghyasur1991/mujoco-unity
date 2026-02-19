@@ -17,6 +17,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Xml;
 using UnityEngine;
+using Mujoco.Mjb;
 
 namespace Mujoco {
 // Actuators provide means to set joints in motion.
@@ -104,17 +105,17 @@ public class MjActuator : MjComponent {
     //// General actuator parameters.
 
     // Activation dynamics type for the actuator.
-    public MujocoLib.mjtDyn DynType;
+    public mjtDyn DynType;
 
     // The gain and bias together determine the output of the force generation mechanism, which is
     // currently assumed to be affine. As already explained in Actuation model, the general formula
     // is:
     //   scalar_force = gain_term * (act or ctrl) + bias_term.
     // The formula uses the activation state when present, and the control otherwise.
-    public MujocoLib.mjtGain GainType;
+    public mjtGain GainType;
 
     // Bias type.
-    public MujocoLib.mjtBias BiasType;
+    public mjtBias BiasType;
 
     // Activation dynamics parameters. The built-in activation types (except for muscle) use only
     // the first parameter, but we provide additional parameters in case user callbacks implement a
@@ -146,9 +147,9 @@ public class MjActuator : MjComponent {
       var gainTypeStr = mjcf.GetStringAttribute("gaintype", defaultValue: "fixed");
       var biasTypeStr = mjcf.GetStringAttribute("biastype", defaultValue: "none");
       var ignoreCase = true;
-      Enum.TryParse<MujocoLib.mjtDyn>($"mjdyn_{dynTypeStr}", ignoreCase, out DynType);
-      Enum.TryParse<MujocoLib.mjtGain>($"mjgain_{gainTypeStr}", ignoreCase, out GainType);
-      Enum.TryParse<MujocoLib.mjtBias>($"mjbias_{biasTypeStr}", ignoreCase, out BiasType);
+      Enum.TryParse<mjtDyn>($"mjDYN_{dynTypeStr}", ignoreCase, out DynType);
+      Enum.TryParse<mjtGain>($"mjGAIN_{gainTypeStr}", ignoreCase, out GainType);
+      Enum.TryParse<mjtBias>($"mjBIAS_{biasTypeStr}", ignoreCase, out BiasType);
 
       DynPrm = mjcf.GetFloatArrayAttribute(
         "dynprm", defaultValue: new float[] { 1.0f, 0.0f, 0.0f }).ToList();
@@ -307,7 +308,7 @@ public class MjActuator : MjComponent {
   // Actuator force.
   public float Force { get; private set; }
 
-  public override MujocoLib.mjtObj ObjectType => MujocoLib.mjtObj.mjOBJ_ACTUATOR;
+  public override mjtObj ObjectType => mjtObj.mjOBJ_ACTUATOR;
 
   // Parse the component settings from an external Mjcf.
   protected override void OnParseMjcf(XmlElement mjcf) {
@@ -385,11 +386,11 @@ public class MjActuator : MjComponent {
   }
 
   // Synchronize the state of the component.
-  public override unsafe void OnSyncState(MujocoLib.mjData_* data) {
-    data->ctrl[MujocoId] = Control;
-    Length = (float)data->actuator_length[MujocoId];
-    Velocity = (float)data->actuator_velocity[MujocoId];
-    Force = (float)data->actuator_force[MujocoId];
+  public override void OnSyncState(MjbData data) {
+    data.SetCtrlAt(MujocoId, Control);
+    Length = data.GetActuatorLength()[MujocoId];
+    Velocity = data.GetActuatorVelocity()[MujocoId];
+    Force = data.GetActuatorForce()[MujocoId];
   }
 
   public void OnValidate() {

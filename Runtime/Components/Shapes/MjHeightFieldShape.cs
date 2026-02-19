@@ -17,7 +17,8 @@ using System.IO;
 using System.Linq;
 using System.Xml;
 using UnityEngine;
-// internal imports
+using Mujoco.Mjb;
+
 namespace Mujoco {
 
 [Serializable]
@@ -54,7 +55,7 @@ public class MjHeightFieldShape : IMjShape {
 
   public int HeightFieldId { get; private set; }
 
-  public unsafe void ToMjcf(XmlElement mjcf, Transform transform) {
+  public void ToMjcf(XmlElement mjcf, Transform transform) {
     if (Terrain.transform.parent != transform)
       Debug.LogWarning(
           $"The terrain of heightfield {transform.name} needs to be parented to the Geom " +
@@ -77,7 +78,7 @@ public class MjHeightFieldShape : IMjShape {
     if (Application.isPlaying) {
       scene.postInitEvent += (unused_first, unused_second) =>
           HeightFieldId =
-              MujocoLib.mj_name2id(scene.Model, (int)MujocoLib.mjtObj.mjOBJ_HFIELD, assetName);
+              scene.Model.Name2Id((int)mjtObj.mjOBJ_HFIELD, assetName);
     }
 
     if (UpdateLimit > 0) {
@@ -116,7 +117,7 @@ public class MjHeightFieldShape : IMjShape {
     }
   }
 
-  public unsafe void UpdateHeightFieldData() {
+  public void UpdateHeightFieldData() {
     RenderTexture.active = Terrain.terrainData.heightmapTexture;
     Texture2D texture = new Texture2D(RenderTexture.active.width, RenderTexture.active.height);
     texture.ReadPixels(new Rect(0, 0, RenderTexture.active.width, RenderTexture.active.height),
@@ -126,10 +127,8 @@ public class MjHeightFieldShape : IMjShape {
 
     float[] curData = texture.GetPixels(0, 0, texture.width, texture.height)
         .Select(c => c.r * 2).ToArray();
-    int adr = MjScene.Instance.Model->hfield_adr[HeightFieldId];
-    for (int i = 0; i < curData.Length; i++) {
-      MjScene.Instance.Model->hfield_data[adr + i] = curData[i];
-    }
+    int adr = MjScene.Instance.Model.HfieldAdr(HeightFieldId);
+    MjScene.Instance.Model.SetHfieldData(adr, curData);
   }
 
   public void CountdownUpdateCondition() {

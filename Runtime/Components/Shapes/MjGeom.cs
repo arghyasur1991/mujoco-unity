@@ -16,6 +16,7 @@ using System;
 using System.Linq;
 using System.Xml;
 using UnityEngine;
+using Mujoco.Mjb;
 
 namespace Mujoco {
 
@@ -30,7 +31,7 @@ public class MjGeom : MjShapeComponent {
   [Tooltip("Advanced settings.")]
   public MjGeomSettings Settings = MjGeomSettings.Default;
 
-  public override MujocoLib.mjtObj ObjectType => MujocoLib.mjtObj.mjOBJ_GEOM;
+  public override mjtObj ObjectType => mjtObj.mjOBJ_GEOM;
   private MjTransformation _geomInGlobalFrame = new MjTransformation();
   private MjTransformation _comTransform;
 
@@ -42,20 +43,13 @@ public class MjGeom : MjShapeComponent {
     Settings.FromMjcf(mjcf);
   }
 
-  // The MuJoCo compiler shifts meshes' frames, so we need to cache this transformation at init and
-  // apply it at runtime.
-  protected override unsafe void OnBindToRuntime(MujocoLib.mjModel_* model, MujocoLib.mjData_* data) {
+  protected override void OnBindToRuntime(MjbModel model, MjbData data) {
     var MjParent = MjHierarchyTool.FindParentComponent<MjBaseBody>(this);
     if (MjParent != null) {
       var comInParentFrame = new MjTransformation(
-          translation: MjEngineTool.UnityVector3(
-              MjEngineTool.MjVector3AtEntry(model->geom_pos, MujocoId)),
-          rotation: MjEngineTool.UnityQuaternion(
-              MjEngineTool.MjQuaternionAtEntry(model->geom_quat, MujocoId)));
+          translation: MjEngineTool.UnityVector3AtEntry(model.GeomPos, MujocoId),
+          rotation: MjEngineTool.UnityQuaternionAtEntry(model.GeomQuat, MujocoId));
 
-      // We don't want to bother calculating global transform in mujoco from mjModel,
-      // so we'll assume it's the same as the Unity transfor (it's the beginning of simulation after
-      // all).
       var globalParentFrame = MjTransformation.LoadGlobal(transform.parent);
       var comInGlobalFrame = globalParentFrame * comInParentFrame;
       var globalFrame = MjTransformation.LoadGlobal(transform);
@@ -77,20 +71,18 @@ public class MjGeom : MjShapeComponent {
     return mjcf;
   }
 
-  public override unsafe void OnSyncState(MujocoLib.mjData_* data) {
+  public override void OnSyncState(MjbData data) {
+    var geomXpos = data.GetGeomXpos();
+    var geomXmat = data.GetGeomXmat();
     if (ShapeType == ShapeTypes.Mesh) {
       _geomInGlobalFrame.Set(
-          translation: MjEngineTool.UnityVector3(
-              MjEngineTool.MjVector3AtEntry(data->geom_xpos, MujocoId)),
-          rotation: MjEngineTool.UnityQuaternionFromMatrix(
-              MjEngineTool.MjMatrixAtEntry(data->geom_xmat, MujocoId)));
+          translation: MjEngineTool.UnityVector3AtEntry(geomXpos, MujocoId),
+          rotation: MjEngineTool.UnityQuaternionFromMatrixAtEntry(geomXmat, MujocoId));
       var comInGlobalFrame = _geomInGlobalFrame * _comTransform;
       comInGlobalFrame.StoreGlobal(transform);
     } else {
-      transform.position = MjEngineTool.UnityVector3(
-          MjEngineTool.MjVector3AtEntry(data->geom_xpos, MujocoId));
-      transform.rotation = MjEngineTool.UnityQuaternionFromMatrix(
-          MjEngineTool.MjMatrixAtEntry(data->geom_xmat, MujocoId));
+      transform.position = MjEngineTool.UnityVector3AtEntry(geomXpos, MujocoId);
+      transform.rotation = MjEngineTool.UnityQuaternionFromMatrixAtEntry(geomXmat, MujocoId);
     }
   }
 

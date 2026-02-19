@@ -16,6 +16,7 @@ using System;
 using System.Linq;
 using System.Xml;
 using UnityEngine;
+using Mujoco.Mjb;
 
 namespace Mujoco {
 
@@ -25,11 +26,10 @@ namespace Mujoco {
     public Transform WeldOffset;
     protected override string _constraintName => "weld";
 
-    protected override unsafe void OnBindToRuntime(MujocoLib.mjModel_* model, MujocoLib.mjData_* data) {
+    protected override unsafe void OnBindToRuntime(MjbModel model, MjbData data) {
       if (WeldOffset) {
-        MjEngineTool.SetMjTransform(
-            MjEngineTool.MjEqualityAtEntry(model->eq_data, MujocoId)+3,
-            WeldOffset.localPosition, WeldOffset.localRotation);
+        float* p = model.EqData.Data + 11 * MujocoId + 3;
+        MjEngineTool.SetMjTransform(p, WeldOffset.localPosition, WeldOffset.localRotation);
       }
     }
 

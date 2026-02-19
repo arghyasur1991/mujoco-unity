@@ -28,7 +28,7 @@ public class MjInertial : MjComponent {
   [Tooltip("Diagonal inertia matrix, expressing the body inertia relative to the inertial frame.")]
   public Vector3 DiagInertia = Vector3.one;
 
-  public override MujocoLib.mjtObj ObjectType => MujocoLib.mjtObj.mjOBJ_BODY;
+  public override mjtObj ObjectType => mjtObj.mjOBJ_BODY;
   protected override bool _suppressNameAttribute => true;
 
   // Parse the component settings from an external Mjcf.

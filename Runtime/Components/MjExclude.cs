@@ -26,7 +26,7 @@ public class MjExclude : MjComponent {
   [Tooltip("Other body whose contacts with first body are ignored")]
   public MjBody Body2;
 
-  public override MujocoLib.mjtObj ObjectType => MujocoLib.mjtObj.mjOBJ_EXCLUDE;
+  public override mjtObj ObjectType => mjtObj.mjOBJ_EXCLUDE;
 
   protected override void OnParseMjcf(XmlElement mjcf) {
     var body1Name = mjcf.GetStringAttribute("body1", defaultValue: string.Empty);

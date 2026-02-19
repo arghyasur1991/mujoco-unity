@@ -15,12 +15,13 @@
 using System;
 using System.Xml;
 using UnityEngine;
+using Mujoco.Mjb;
 
 namespace Mujoco {
 
 public abstract class MjBaseTendon : MjComponent {
 
-  public override MujocoLib.mjtObj ObjectType => MujocoLib.mjtObj.mjOBJ_TENDON;
+  public override mjtObj ObjectType => mjtObj.mjOBJ_TENDON;
 
   public SolverSettings Solver = SolverSettings.Default;
 
@@ -58,8 +59,8 @@ public abstract class MjBaseTendon : MjComponent {
   }
 
   // Synchronize the state of the component.
-  public override unsafe void OnSyncState(MujocoLib.mjData_* data) {
-    Length = (float)data->ten_length[MujocoId];
+  public override void OnSyncState(MjbData data) {
+    Length = data.GetTenLength()[MujocoId];
   }
 }
 }

@@ -20,7 +20,7 @@ using UnityEngine;
 namespace Mujoco {
 
   public abstract class MjBaseConstraint : MjComponent {
-    public override MujocoLib.mjtObj ObjectType => MujocoLib.mjtObj.mjOBJ_EQUALITY;
+    public override mjtObj ObjectType => mjtObj.mjOBJ_EQUALITY;
 
     protected abstract string _constraintName { get; }
 

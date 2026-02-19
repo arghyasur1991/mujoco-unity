@@ -16,13 +16,14 @@ using System;
 using System.Linq;
 using System.Xml;
 using UnityEngine;
+using Mujoco.Mjb;
 
 namespace Mujoco {
 
 // Defines a reference frame and an anchoring point for other elements of the rig.
 public class MjSite : MjShapeComponent {
 
-  public override MujocoLib.mjtObj ObjectType => MujocoLib.mjtObj.mjOBJ_SITE;
+  public override mjtObj ObjectType => mjtObj.mjOBJ_SITE;
 
   // Parse the component settings from an external Mjcf.
   protected override void OnParseMjcf(XmlElement mjcf) {
@@ -39,11 +40,9 @@ public class MjSite : MjShapeComponent {
   }
 
   // Synchronize the state of the component.
-  public override unsafe void OnSyncState(MujocoLib.mjData_* data) {
-    transform.position = MjEngineTool.UnityVector3(
-        MjEngineTool.MjVector3AtEntry(data->site_xpos, MujocoId));
-    transform.rotation = MjEngineTool.UnityQuaternionFromMatrix(
-        MjEngineTool.MjMatrixAtEntry(data->site_xmat, MujocoId));
+  public override void OnSyncState(MjbData data) {
+    transform.position = MjEngineTool.UnityVector3AtEntry(data.GetSiteXpos(), MujocoId);
+    transform.rotation = MjEngineTool.UnityQuaternionFromMatrixAtEntry(data.GetSiteXmat(), MujocoId);
   }
 
   public void OnDrawGizmosSelected() {
