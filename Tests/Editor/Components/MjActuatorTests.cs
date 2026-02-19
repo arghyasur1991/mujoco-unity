@@ -153,32 +153,32 @@ public class MjGeneralActuatorTests {
     Assert.That(_doc.OuterXml, Does.Contain($"<general"));
   }
 
-  [TestCase(MujocoLib.mjtDyn.mjDYN_NONE, "none")]
-  [TestCase(MujocoLib.mjtDyn.mjDYN_INTEGRATOR, "integrator")]
-  [TestCase(MujocoLib.mjtDyn.mjDYN_FILTER, "filter")]
-  [TestCase(MujocoLib.mjtDyn.mjDYN_MUSCLE, "muscle")]
-  [TestCase(MujocoLib.mjtDyn.mjDYN_USER, "user")]
-  public void DynamicsTypeMjcf(MujocoLib.mjtDyn value, string expected) {
+  [TestCase(mjtDyn.mjDYN_NONE, "none")]
+  [TestCase(mjtDyn.mjDYN_INTEGRATOR, "integrator")]
+  [TestCase(mjtDyn.mjDYN_FILTER, "filter")]
+  [TestCase(mjtDyn.mjDYN_MUSCLE, "muscle")]
+  [TestCase(mjtDyn.mjDYN_USER, "user")]
+  public void DynamicsTypeMjcf(mjtDyn value, string expected) {
     _actuator.CustomParams.DynType = value;
     _doc.AppendChild(_actuator.GenerateMjcf("name", _doc));
     Assert.That(_doc.OuterXml, Does.Contain($"dyntype=\"{expected}\""));
   }
 
-  [TestCase(MujocoLib.mjtGain.mjGAIN_FIXED, "fixed")]
-  [TestCase(MujocoLib.mjtGain.mjGAIN_AFFINE, "affine")]
-  [TestCase(MujocoLib.mjtGain.mjGAIN_MUSCLE, "muscle")]
-  [TestCase(MujocoLib.mjtGain.mjGAIN_USER, "user")]
-  public void GainTypeMjcf(MujocoLib.mjtGain value, string expected) {
+  [TestCase(mjtGain.mjGAIN_FIXED, "fixed")]
+  [TestCase(mjtGain.mjGAIN_AFFINE, "affine")]
+  [TestCase(mjtGain.mjGAIN_MUSCLE, "muscle")]
+  [TestCase(mjtGain.mjGAIN_USER, "user")]
+  public void GainTypeMjcf(mjtGain value, string expected) {
     _actuator.CustomParams.GainType = value;
     _doc.AppendChild(_actuator.GenerateMjcf("name", _doc));
     Assert.That(_doc.OuterXml, Does.Contain($"gaintype=\"{expected}\""));
   }
 
-  [TestCase(MujocoLib.mjtBias.mjBIAS_NONE, "none")]
-  [TestCase(MujocoLib.mjtBias.mjBIAS_AFFINE, "affine")]
-  [TestCase(MujocoLib.mjtBias.mjBIAS_MUSCLE, "muscle")]
-  [TestCase(MujocoLib.mjtBias.mjBIAS_USER, "user")]
-  public void BiasTypeMjcf(MujocoLib.mjtBias value, string expected) {
+  [TestCase(mjtBias.mjBIAS_NONE, "none")]
+  [TestCase(mjtBias.mjBIAS_AFFINE, "affine")]
+  [TestCase(mjtBias.mjBIAS_MUSCLE, "muscle")]
+  [TestCase(mjtBias.mjBIAS_USER, "user")]
+  public void BiasTypeMjcf(mjtBias value, string expected) {
     _actuator.CustomParams.BiasType = value;
     _doc.AppendChild(_actuator.GenerateMjcf("name", _doc));
     Assert.That(_doc.OuterXml, Does.Contain($"biastype=\"{expected}\""));
@@ -211,9 +211,9 @@ public class MjGeneralActuatorTests {
         "<general joint=\"my_joint\" dyntype=\"integrator\" gaintype=\"muscle\" "
         + "biastype=\"affine\" dynprm=\"6\" gainprm=\"7 8\" biasprm=\"9 10 11 12\"/>");
     _actuator.ParseMjcf(_doc.GetElementsByTagName("general")[0] as XmlElement);
-    Assert.That(_actuator.CustomParams.DynType, Is.EqualTo(MujocoLib.mjtDyn.mjDYN_INTEGRATOR));
-    Assert.That(_actuator.CustomParams.GainType, Is.EqualTo(MujocoLib.mjtGain.mjGAIN_MUSCLE));
-    Assert.That(_actuator.CustomParams.BiasType, Is.EqualTo(MujocoLib.mjtBias.mjBIAS_AFFINE));
+    Assert.That(_actuator.CustomParams.DynType, Is.EqualTo(mjtDyn.mjDYN_INTEGRATOR));
+    Assert.That(_actuator.CustomParams.GainType, Is.EqualTo(mjtGain.mjGAIN_MUSCLE));
+    Assert.That(_actuator.CustomParams.BiasType, Is.EqualTo(mjtBias.mjBIAS_AFFINE));
     Assert.That(_actuator.CustomParams.DynPrm, Has.Count.EqualTo(3));
     Assert.That(_actuator.CustomParams.GainPrm, Has.Count.EqualTo(3));
     Assert.That(_actuator.CustomParams.BiasPrm, Has.Count.EqualTo(4));
@@ -233,9 +233,9 @@ public class MjGeneralActuatorTests {
   public void ParseDefaultSettings() {
     _doc.LoadXml("<general joint=\"my_joint\"/>");
     _actuator.ParseMjcf(_doc.GetElementsByTagName("general")[0] as XmlElement);
-    Assert.That(_actuator.CustomParams.DynType, Is.EqualTo(MujocoLib.mjtDyn.mjDYN_NONE));
-    Assert.That(_actuator.CustomParams.GainType, Is.EqualTo(MujocoLib.mjtGain.mjGAIN_FIXED));
-    Assert.That(_actuator.CustomParams.BiasType, Is.EqualTo(MujocoLib.mjtBias.mjBIAS_NONE));
+    Assert.That(_actuator.CustomParams.DynType, Is.EqualTo(mjtDyn.mjDYN_NONE));
+    Assert.That(_actuator.CustomParams.GainType, Is.EqualTo(mjtGain.mjGAIN_FIXED));
+    Assert.That(_actuator.CustomParams.BiasType, Is.EqualTo(mjtBias.mjBIAS_NONE));
     Assert.That(_actuator.CustomParams.DynPrm, Has.Count.EqualTo(3));
     Assert.That(_actuator.CustomParams.GainPrm, Has.Count.EqualTo(3));
     Assert.That(_actuator.CustomParams.BiasPrm, Has.Count.EqualTo(3));

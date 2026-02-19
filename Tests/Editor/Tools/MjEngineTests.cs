@@ -14,11 +14,11 @@
 
 using System;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Xml;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools.Utils;
+using Mujoco.Mjb;
 
 namespace Mujoco {
 
@@ -26,12 +26,12 @@ namespace Mujoco {
   public class MjEngineToolXmlLoadingTests {
 
     [Test]
-    public unsafe void LoadingSceneFromAProvidedAsset() {
+    public void LoadingSceneFromAProvidedAsset() {
       var modelFile = Resources.Load<TextAsset>("ValidModel");
-      var modelPtr = MjEngineTool.LoadModelFromString(modelFile.text);
-      var model =
-          (MujocoLib.mjModel_)Marshal.PtrToStructure(new IntPtr(modelPtr), typeof(MujocoLib.mjModel_));
-      Assert.That(model.nbody, Is.EqualTo(3));
+      var backend = MjbBackend.Create(MjbBackendType.CPU);
+      var model = backend.LoadModelFromString(modelFile.text);
+      Assert.That(model.Info.nbody, Is.EqualTo(3));
+      model.Dispose();
     }
   }
 
@@ -149,7 +149,7 @@ namespace Mujoco {
   [TestFixture]
   public class MjEngineToolTransformSerializationTests {
     public class FakeMjComponent : MjComponent {
-      public override MujocoLib.mjtObj ObjectType => MujocoLib.mjtObj.mjOBJ_GEOM;
+      public override mjtObj ObjectType => mjtObj.mjOBJ_GEOM;
 
       protected override void OnParseMjcf(XmlElement mjcf) {}
 

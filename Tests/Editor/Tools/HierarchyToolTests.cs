@@ -25,7 +25,7 @@ namespace Mujoco {
   [TestFixture]
   public class FindParentComponentTests {
     public class FakeMjComponent : MjComponent {
-      public override MujocoLib.mjtObj ObjectType => MujocoLib.mjtObj.mjOBJ_GEOM;
+      public override mjtObj ObjectType => mjtObj.mjOBJ_GEOM;
       protected override void OnParseMjcf(XmlElement mjcf) {}
       protected override XmlElement OnGenerateMjcf(XmlDocument doc) {
         return null;
@@ -89,7 +89,7 @@ namespace Mujoco {
   [TestFixture]
   public class HierachyLinearizationTests {
     public class FakeMjComponent : MjComponent {
-      public override MujocoLib.mjtObj ObjectType => MujocoLib.mjtObj.mjOBJ_GEOM;
+      public override mjtObj ObjectType => mjtObj.mjOBJ_GEOM;
       protected override void OnParseMjcf(XmlElement mjcf) {}
       protected override XmlElement OnGenerateMjcf(XmlDocument doc) {
         return null;

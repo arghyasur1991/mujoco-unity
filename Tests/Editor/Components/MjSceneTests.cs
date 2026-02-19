@@ -19,6 +19,7 @@ using System.Xml;
 using NUnit.Framework;
 using UnityEngine;
 using UnityEngine.TestTools.Utils;
+using Mujoco.Mjb;
 
 namespace Mujoco {
 
@@ -44,11 +45,11 @@ public class MjSceneGenerationTests {
   }
 
   [Test]
-  public unsafe void ModelStructureIsInitialized() {
+  public void ModelStructureIsInitialized() {
     _fakeBodyA.enabled = true;
     _fakeBodyB.enabled = true;
     _scene.CreateScene();
-    Assert.That(_scene.Model->nbody, Is.GreaterThanOrEqualTo(2));
+    Assert.That(_scene.Model.Info.nbody, Is.GreaterThanOrEqualTo(2));
   }
 
   [Test]
@@ -64,9 +65,9 @@ public class MjSceneGenerationTests {
   }
 
   [Test]
-  public unsafe void PhysicsRuntimeError() {
+  public void PhysicsRuntimeError() {
     _scene.CreateScene();
-    _scene.Data->qpos[0] = float.PositiveInfinity;
+    _scene.Data.GetQpos()[0] = float.PositiveInfinity;
     Assert.That(
         () => { _scene.StepScene(); },
         Throws.TypeOf<PhysicsRuntimeException>()
@@ -119,10 +120,10 @@ public class MjSceneGenerationTests {
   }
 
   [Test]
-  public unsafe void SceneRecreatedWithAddition() {
+  public void SceneRecreatedWithAddition() {
     _scene.CreateScene();
-    _scene.Data->qvel[0] = 1;
-    var nq = _scene.Model->nq;
+    _scene.Data.GetQvel()[0] = 1;
+    var nq = _scene.Model.Info.nq;
     var tickedRotation = _body.transform.rotation;
     var body = new GameObject("body").AddComponent<MjBody>();
     var inertia = new GameObject("inertia").AddComponent<MjInertial>();
@@ -130,31 +131,31 @@ public class MjSceneGenerationTests {
     var joint = new GameObject("joint").AddComponent<MjHingeJoint>();
     joint.transform.parent = body.transform;
     _scene.RecreateScene();
-    Assert.That(_scene.Model->nq, Is.EqualTo(nq+1));
-    Assert.That(_scene.Data->qvel[joint.DofAddress], Is.EqualTo(0));
-    Assert.That(_scene.Data->qvel[_joint.DofAddress], Is.EqualTo(1));
+    Assert.That(_scene.Model.Info.nq, Is.EqualTo(nq+1));
+    Assert.That(_scene.Data.GetQvel()[joint.DofAddress], Is.EqualTo(0));
+    Assert.That(_scene.Data.GetQvel()[_joint.DofAddress], Is.EqualTo(1));
     UnityEngine.Object.DestroyImmediate(inertia.gameObject);
     UnityEngine.Object.DestroyImmediate(joint.gameObject);
     UnityEngine.Object.DestroyImmediate(body.gameObject);
   }
 
   [Test]
-  public unsafe void SceneRecreatedAfterDeletion() {
+  public void SceneRecreatedAfterDeletion() {
     var body = new GameObject("body").AddComponent<MjBody>();
     var inertia = new GameObject("inertia").AddComponent<MjInertial>();
     inertia.transform.parent = body.transform;
     var joint = new GameObject("joint").AddComponent<MjHingeJoint>();
     joint.transform.parent = body.transform;
     _scene.CreateScene();
-    _scene.Data->qvel[0] = 1;
-    _scene.Data->qvel[1] = 2;
-    var nq = _scene.Model->nq;
+    _scene.Data.GetQvel()[0] = 1;
+    _scene.Data.GetQvel()[1] = 2;
+    var nq = _scene.Model.Info.nq;
     UnityEngine.Object.DestroyImmediate(inertia.gameObject);
     UnityEngine.Object.DestroyImmediate(joint.gameObject);
     UnityEngine.Object.DestroyImmediate(body.gameObject);
     _scene.RecreateScene();
-    Assert.That(_scene.Model->nq, Is.EqualTo(nq-1));
-    Assert.That(_scene.Data->qvel[0], Is.EqualTo(2));
+    Assert.That(_scene.Model.Info.nq, Is.EqualTo(nq-1));
+    Assert.That(_scene.Data.GetQvel()[0], Is.EqualTo(2));
   }
 
 #region Test setup.
@@ -162,7 +163,7 @@ public class MjSceneGenerationTests {
   public class FakeMjBody : MjBaseBody {
     public bool StateSynced = false;
 
-    public override MujocoLib.mjtObj ObjectType => MujocoLib.mjtObj.mjOBJ_BODY;
+    public override mjtObj ObjectType => mjtObj.mjOBJ_BODY;
 
     protected override void OnParseMjcf(XmlElement mjcf) {}
 
@@ -173,7 +174,7 @@ public class MjSceneGenerationTests {
       return mjcf;
     }
 
-    public override unsafe void OnSyncState(MujocoLib.mjData_* data) {
+    public override void OnSyncState(MjbData data) {
       StateSynced = true;
     }
   }
