@@ -323,6 +323,13 @@ namespace Mujoco.Mjb
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
         public static extern float* mjb_batched_get_cfrc_ext(IntPtr sim, int* nOut);
 
+        // Per-env state setters (for custom RSI resets with noise).
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void mjb_batched_set_env_qpos(IntPtr sim, int envIdx, float* qpos, int nq);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern void mjb_batched_set_env_qvel(IntPtr sim, int envIdx, float* qvel, int nv);
+
         // Evaluate qpos + qvel in a single GPU fence. No-op for CPU backend.
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
         public static extern void mjb_batched_eval_state(IntPtr sim);

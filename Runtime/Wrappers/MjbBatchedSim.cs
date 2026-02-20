@@ -63,6 +63,22 @@ namespace Mujoco.Mjb
                 MjbNativeMethods.mjb_batched_reset(Handle, p);
         }
 
+        // ── Per-env state setters (for custom RSI resets) ─────────────
+
+        public unsafe void SetEnvQpos(int envIndex, float[] qpos)
+        {
+            ThrowIfDisposed();
+            fixed (float* p = qpos)
+                MjbNativeMethods.mjb_batched_set_env_qpos(Handle, envIndex, p, qpos.Length);
+        }
+
+        public unsafe void SetEnvQvel(int envIndex, float[] qvel)
+        {
+            ThrowIfDisposed();
+            fixed (float* p = qvel)
+                MjbNativeMethods.mjb_batched_set_env_qvel(Handle, envIndex, p, qvel.Length);
+        }
+
         // ── Batched state getters (float[numEnvs * dim]) ────────────
 
         public unsafe MjbFloatSpan GetQpos()
