@@ -91,16 +91,18 @@ namespace Mujoco.Mjb
 
         public void SetQpos(int index, double value)
         {
-            if ((uint)index >= (uint)_nq) return;
-            float* ptr = _sim.GetQpos().Data + _envIndex * _nq;
-            ptr[index] = (float)value;
+            // CPU backend: Get*() gathers N mjData into a temp buffer — writes here are lost.
+            // Use SetQpos(float[]) which goes through mjb_batched_set_env_qpos.
+            throw new NotSupportedException(
+                "Per-index SetQpos not supported on batched proxy (writes to gather buffer, not mjData). " +
+                "Build a float[] and use SetQpos(float[]).");
         }
 
         public void SetQvel(int index, double value)
         {
-            if ((uint)index >= (uint)_nv) return;
-            float* ptr = _sim.GetQvel().Data + _envIndex * _nv;
-            ptr[index] = (float)value;
+            throw new NotSupportedException(
+                "Per-index SetQvel not supported on batched proxy (writes to gather buffer, not mjData). " +
+                "Build a float[] and use SetQvel(float[]).");
         }
 
         // ── State getters ───────────────────────────────────────────────
