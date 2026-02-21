@@ -34,10 +34,16 @@ namespace Mujoco.Mjb
         private MjbModel _model;
         private readonly int _envIndex;
         private readonly int _nq, _nv, _nu, _nbody, _njnt, _ngeom;
-        private IntPtr _ctrlMem;
+        private float* _ctrlPtr;
+        private bool _ownsCtrl;
         private bool _disposed;
 
-        public BatchedPhysicsProxy(MjbBatchedSim sim, int envIndex, MjbModel model)
+        /// <param name="sharedCtrlPtr">
+        /// If non-null, GetCtrl() returns a span over this pointer (zero-copy into shared
+        /// batched ctrl buffer). If null, allocates a local buffer (legacy path).
+        /// </param>
+        public BatchedPhysicsProxy(MjbBatchedSim sim, int envIndex, MjbModel model,
+            float* sharedCtrlPtr = null)
         {
             _sim = sim ?? throw new ArgumentNullException(nameof(sim));
             _model = model ?? throw new ArgumentNullException(nameof(model));
@@ -51,8 +57,17 @@ namespace Mujoco.Mjb
             _njnt = info.njnt;
             _ngeom = info.ngeom;
 
-            _ctrlMem = Marshal.AllocHGlobal(_nu * sizeof(float));
-            new Span<byte>((void*)_ctrlMem, _nu * sizeof(float)).Clear();
+            if (sharedCtrlPtr != null)
+            {
+                _ctrlPtr = sharedCtrlPtr;
+                _ownsCtrl = false;
+            }
+            else
+            {
+                _ctrlPtr = (float*)Marshal.AllocHGlobal(_nu * sizeof(float));
+                new Span<byte>(_ctrlPtr, _nu * sizeof(float)).Clear();
+                _ownsCtrl = true;
+            }
         }
 
         // ── Model dimensions ────────────────────────────────────────────
@@ -76,14 +91,13 @@ namespace Mujoco.Mjb
         public void SetCtrl(float[] ctrl)
         {
             int n = Math.Min(ctrl.Length, _nu);
-            float* dst = (float*)_ctrlMem;
-            for (int i = 0; i < n; i++) dst[i] = ctrl[i];
+            for (int i = 0; i < n; i++) _ctrlPtr[i] = ctrl[i];
         }
 
         public void SetCtrl(int index, float value)
         {
             if ((uint)index < (uint)_nu)
-                ((float*)_ctrlMem)[index] = value;
+                _ctrlPtr[index] = value;
         }
 
         public void SetQpos(float[] qpos) => _sim.SetEnvQpos(_envIndex, qpos);
@@ -111,7 +125,7 @@ namespace Mujoco.Mjb
 
         public MjbFloatSpan GetQpos() => Slice(_sim.GetQpos(), _envIndex * _nq, _nq);
         public MjbFloatSpan GetQvel() => Slice(_sim.GetQvel(), _envIndex * _nv, _nv);
-        public MjbFloatSpan GetCtrl() => new MjbFloatSpan((float*)_ctrlMem, _nu);
+        public MjbFloatSpan GetCtrl() => new MjbFloatSpan(_ctrlPtr, _nu);
         public MjbFloatSpan GetXpos() => Slice(_sim.GetXpos(), _envIndex * _nbody * 3, _nbody * 3);
         public MjbFloatSpan GetXipos() => GetXpos();
         public MjbFloatSpan GetSubtreeCom() => Slice(_sim.GetSubtreeCom(), _envIndex * _nbody * 3, _nbody * 3);
@@ -137,6 +151,7 @@ namespace Mujoco.Mjb
 
         private static MjbFloatSpan Slice(MjbFloatSpan full, int offset, int length)
         {
+            if (full.Data == null) return default;
             return new MjbFloatSpan(full.Data + offset, length);
         }
 
@@ -144,11 +159,11 @@ namespace Mujoco.Mjb
         {
             if (_disposed) return;
             _disposed = true;
-            if (_ctrlMem != IntPtr.Zero)
+            if (_ownsCtrl && _ctrlPtr != null)
             {
-                Marshal.FreeHGlobal(_ctrlMem);
-                _ctrlMem = IntPtr.Zero;
+                Marshal.FreeHGlobal((IntPtr)_ctrlPtr);
             }
+            _ctrlPtr = null;
             _sim = null;
             _model = null;
         }
