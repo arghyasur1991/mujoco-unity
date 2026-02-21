@@ -37,11 +37,6 @@ namespace Mujoco.Mjb
         private IntPtr _ctrlMem;
         private bool _disposed;
 
-        // Cached per-env spans — resolved once at construction, zero P/Invoke on access.
-        // Safe because native batched arrays are allocated once and never reallocated.
-        private readonly MjbFloatSpan _qpos, _qvel, _xpos, _subtreeCom;
-        private readonly MjbFloatSpan _cinert, _cvel, _qfrcActuator, _cfrcExt;
-
         public BatchedPhysicsProxy(MjbBatchedSim sim, int envIndex, MjbModel model)
         {
             _sim = sim ?? throw new ArgumentNullException(nameof(sim));
@@ -58,15 +53,6 @@ namespace Mujoco.Mjb
 
             _ctrlMem = Marshal.AllocHGlobal(_nu * sizeof(float));
             new Span<byte>((void*)_ctrlMem, _nu * sizeof(float)).Clear();
-
-            _qpos = Slice(sim.GetQpos(), envIndex * _nq, _nq);
-            _qvel = Slice(sim.GetQvel(), envIndex * _nv, _nv);
-            _xpos = Slice(sim.GetXpos(), envIndex * _nbody * 3, _nbody * 3);
-            _subtreeCom = Slice(sim.GetSubtreeCom(), envIndex * _nbody * 3, _nbody * 3);
-            _cinert = Slice(sim.GetCinert(), envIndex * _nbody * 10, _nbody * 10);
-            _cvel = Slice(sim.GetCvel(), envIndex * _nbody * 6, _nbody * 6);
-            _qfrcActuator = Slice(sim.GetQfrcActuator(), envIndex * _nv, _nv);
-            _cfrcExt = Slice(sim.GetCfrcExt(), envIndex * _nbody * 6, _nbody * 6);
         }
 
         // ── Model dimensions ────────────────────────────────────────────
@@ -105,28 +91,32 @@ namespace Mujoco.Mjb
 
         public void SetQpos(int index, double value)
         {
-            if ((uint)index < (uint)_nq)
-                _qpos.Data[index] = (float)value;
+            if ((uint)index >= (uint)_nq) return;
+            float* ptr = _sim.GetQpos().Data + _envIndex * _nq;
+            ptr[index] = (float)value;
         }
 
         public void SetQvel(int index, double value)
         {
-            if ((uint)index < (uint)_nv)
-                _qvel.Data[index] = (float)value;
+            if ((uint)index >= (uint)_nv) return;
+            float* ptr = _sim.GetQvel().Data + _envIndex * _nv;
+            ptr[index] = (float)value;
         }
 
-        // ── State getters (cached spans — zero P/Invoke) ────────────────
+        // ── State getters ───────────────────────────────────────────────
+        // NOT cached: CPU backend gathers from N separate mjData* into a
+        // shared buffer on each Get*() call. Caching would freeze state.
 
-        public MjbFloatSpan GetQpos() => _qpos;
-        public MjbFloatSpan GetQvel() => _qvel;
+        public MjbFloatSpan GetQpos() => Slice(_sim.GetQpos(), _envIndex * _nq, _nq);
+        public MjbFloatSpan GetQvel() => Slice(_sim.GetQvel(), _envIndex * _nv, _nv);
         public MjbFloatSpan GetCtrl() => new MjbFloatSpan((float*)_ctrlMem, _nu);
-        public MjbFloatSpan GetXpos() => _xpos;
-        public MjbFloatSpan GetXipos() => _xpos;
-        public MjbFloatSpan GetSubtreeCom() => _subtreeCom;
-        public MjbFloatSpan GetCinert() => _cinert;
-        public MjbFloatSpan GetCvel() => _cvel;
-        public MjbFloatSpan GetQfrcActuator() => _qfrcActuator;
-        public MjbFloatSpan GetCfrcExt() => _cfrcExt;
+        public MjbFloatSpan GetXpos() => Slice(_sim.GetXpos(), _envIndex * _nbody * 3, _nbody * 3);
+        public MjbFloatSpan GetXipos() => GetXpos();
+        public MjbFloatSpan GetSubtreeCom() => Slice(_sim.GetSubtreeCom(), _envIndex * _nbody * 3, _nbody * 3);
+        public MjbFloatSpan GetCinert() => Slice(_sim.GetCinert(), _envIndex * _nbody * 10, _nbody * 10);
+        public MjbFloatSpan GetCvel() => Slice(_sim.GetCvel(), _envIndex * _nbody * 6, _nbody * 6);
+        public MjbFloatSpan GetQfrcActuator() => Slice(_sim.GetQfrcActuator(), _envIndex * _nv, _nv);
+        public MjbFloatSpan GetCfrcExt() => Slice(_sim.GetCfrcExt(), _envIndex * _nbody * 6, _nbody * 6);
 
         public MjbFloatSpan GetGeomXpos() => default;
         public MjbFloatSpan GetGeomXmat() => default;
