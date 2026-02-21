@@ -91,14 +91,16 @@ namespace Mujoco.Mjb
 
         public void SetQpos(int index, double value)
         {
-            throw new NotSupportedException(
-                "Per-index SetQpos not supported on batched proxy. Use SetQpos(float[]).");
+            if ((uint)index >= (uint)_nq) return;
+            float* ptr = _sim.GetQpos().Data + _envIndex * _nq;
+            ptr[index] = (float)value;
         }
 
         public void SetQvel(int index, double value)
         {
-            throw new NotSupportedException(
-                "Per-index SetQvel not supported on batched proxy. Use SetQvel(float[]).");
+            if ((uint)index >= (uint)_nv) return;
+            float* ptr = _sim.GetQvel().Data + _envIndex * _nv;
+            ptr[index] = (float)value;
         }
 
         // ── State getters (zero-copy slices into batched arrays) ────────
