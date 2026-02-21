@@ -294,6 +294,9 @@ namespace Mujoco.Mjb
         public static extern void mjb_batched_free(IntPtr sim);
 
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int mjb_batched_is_gpu(IntPtr sim);
+
+        [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]
         public static extern void mjb_batched_step(IntPtr sim, float* ctrl);
 
         [DllImport(LibName, CallingConvention = CallingConvention.Cdecl)]

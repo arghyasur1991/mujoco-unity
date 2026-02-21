@@ -37,6 +37,12 @@ namespace Mujoco.Mjb
         }
 
         /// <summary>
+        /// True if Metal GPU kernels are active; false if using CPU thread pool
+        /// (auto-fallback for large models with nv > 80).
+        /// </summary>
+        public bool IsGpu => Handle != IntPtr.Zero && MjbNativeMethods.mjb_batched_is_gpu(Handle) != 0;
+
+        /// <summary>
         /// Gather all state fields once. Subsequent Get*() calls return cached spans
         /// until InvalidateCache() is called. Eliminates O(N²) P/Invoke overhead when
         /// N proxies each call Get*() in a per-env loop.
