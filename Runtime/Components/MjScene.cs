@@ -412,11 +412,11 @@ public class MjScene : MonoBehaviour {
         _gpuTimingCtrl = _gpuTimingPhysics = _gpuTimingSync = _gpuTimingKin = 0;
       }
     } else if (ctrlCallback != null) {
-      Data.Step1();
-      ctrlCallback?.Invoke(this, new MjStepArgs(Model, Data));
-      Data.Step2();
-      for (int i = 1; i < _subStepsPerFixedUpdate; i++)
-        _backend.Step();
+      for (int i = 0; i < _subStepsPerFixedUpdate; i++) {
+        Data.Step1();
+        ctrlCallback?.Invoke(this, new MjStepArgs(Model, Data));
+        Data.Step2();
+      }
     } else {
       for (int i = 0; i < _subStepsPerFixedUpdate; i++)
         _backend.Step();
