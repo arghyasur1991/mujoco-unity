@@ -27,10 +27,36 @@ namespace Mujoco.Mjb
         internal IntPtr Handle { get; private set; }
         private bool _disposed;
 
+        private MjbFloatSpan _cQpos, _cQvel, _cXpos, _cSubtreeCom;
+        private MjbFloatSpan _cCinert, _cCvel, _cQfrcActuator, _cCfrcExt;
+        private bool _cached;
+
         internal MjbBatchedSim(IntPtr handle)
         {
             Handle = handle;
         }
+
+        /// <summary>
+        /// Gather all state fields once. Subsequent Get*() calls return cached spans
+        /// until InvalidateCache() is called. Eliminates O(N²) P/Invoke overhead when
+        /// N proxies each call Get*() in a per-env loop.
+        /// </summary>
+        public unsafe void CacheState()
+        {
+            ThrowIfDisposed();
+            int n;
+            _cQpos = new MjbFloatSpan(MjbNativeMethods.mjb_batched_get_qpos(Handle, &n), n);
+            _cQvel = new MjbFloatSpan(MjbNativeMethods.mjb_batched_get_qvel(Handle, &n), n);
+            _cXpos = new MjbFloatSpan(MjbNativeMethods.mjb_batched_get_xpos(Handle, &n), n);
+            _cSubtreeCom = new MjbFloatSpan(MjbNativeMethods.mjb_batched_get_subtree_com(Handle, &n), n);
+            _cCinert = new MjbFloatSpan(MjbNativeMethods.mjb_batched_get_cinert(Handle, &n), n);
+            _cCvel = new MjbFloatSpan(MjbNativeMethods.mjb_batched_get_cvel(Handle, &n), n);
+            _cQfrcActuator = new MjbFloatSpan(MjbNativeMethods.mjb_batched_get_qfrc_actuator(Handle, &n), n);
+            _cCfrcExt = new MjbFloatSpan(MjbNativeMethods.mjb_batched_get_cfrc_ext(Handle, &n), n);
+            _cached = true;
+        }
+
+        public void InvalidateCache() => _cached = false;
 
         /// <summary>
         /// Step all environments. ctrl must be float[numEnvs * nu].
@@ -83,66 +109,66 @@ namespace Mujoco.Mjb
 
         public unsafe MjbFloatSpan GetQpos()
         {
+            if (_cached) return _cQpos;
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_batched_get_qpos(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            return new MjbFloatSpan(MjbNativeMethods.mjb_batched_get_qpos(Handle, &n), n);
         }
 
         public unsafe MjbFloatSpan GetQvel()
         {
+            if (_cached) return _cQvel;
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_batched_get_qvel(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            return new MjbFloatSpan(MjbNativeMethods.mjb_batched_get_qvel(Handle, &n), n);
         }
 
         public unsafe MjbFloatSpan GetXpos()
         {
+            if (_cached) return _cXpos;
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_batched_get_xpos(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            return new MjbFloatSpan(MjbNativeMethods.mjb_batched_get_xpos(Handle, &n), n);
         }
 
         public unsafe MjbFloatSpan GetSubtreeCom()
         {
+            if (_cached) return _cSubtreeCom;
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_batched_get_subtree_com(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            return new MjbFloatSpan(MjbNativeMethods.mjb_batched_get_subtree_com(Handle, &n), n);
         }
 
         public unsafe MjbFloatSpan GetCinert()
         {
+            if (_cached) return _cCinert;
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_batched_get_cinert(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            return new MjbFloatSpan(MjbNativeMethods.mjb_batched_get_cinert(Handle, &n), n);
         }
 
         public unsafe MjbFloatSpan GetCvel()
         {
+            if (_cached) return _cCvel;
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_batched_get_cvel(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            return new MjbFloatSpan(MjbNativeMethods.mjb_batched_get_cvel(Handle, &n), n);
         }
 
         public unsafe MjbFloatSpan GetQfrcActuator()
         {
+            if (_cached) return _cQfrcActuator;
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_batched_get_qfrc_actuator(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            return new MjbFloatSpan(MjbNativeMethods.mjb_batched_get_qfrc_actuator(Handle, &n), n);
         }
 
         public unsafe MjbFloatSpan GetCfrcExt()
         {
+            if (_cached) return _cCfrcExt;
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_batched_get_cfrc_ext(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            return new MjbFloatSpan(MjbNativeMethods.mjb_batched_get_cfrc_ext(Handle, &n), n);
         }
 
         private void ThrowIfDisposed()
