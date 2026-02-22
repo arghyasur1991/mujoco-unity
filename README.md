@@ -1,6 +1,6 @@
-# MuJoCo MLX for Unity
+# MuJoCo for Unity
 
-GPU-accelerated MuJoCo physics for Unity via Apple Metal/MLX. Drop-in superset of the DeepMind `org.mujoco` Unity plugin.
+Double-precision MuJoCo physics for Unity. Drop-in superset of the DeepMind `org.mujoco` Unity plugin with native `double` precision throughout and batched simulation for RL training.
 
 ## What is this?
 
@@ -8,11 +8,11 @@ This package provides:
 
 1. **All original MuJoCo Unity components** -- `MjScene`, `MjBody`, `MjGeom`, `MjJoint`, `MjActuator`, etc. Scene authoring, MJCF import/export, and visualization work exactly as before.
 
-2. **MuJoCo Backend (mjb) C# API** -- managed wrappers for the `libmjb` unified physics API that dispatches to either:
-   - **CPU backend** -- MuJoCo C (double-precision, thread pool)
-   - **MLX backend** -- MuJoCo-MLX (float32, Metal GPU via Apple MLX)
+2. **MuJoCo accessor shim (`libmjaccess`)** -- a thin pure-C library that exposes `mjModel`/`mjData` struct fields as typed accessor functions. All getters return native `double*` pointers directly into MuJoCo's arrays (zero-copy, zero-conversion). All setters use `memcpy` into native buffers.
 
-3. **Batched simulation** -- step thousands of environments in parallel on Metal GPU for reinforcement learning training at **73K+ steps/second** (8192 environments, Gymnasium Humanoid-v5).
+3. **C# wrappers** -- `MjbModel`, `MjbData`, `MjbBatchedSim` provide managed access via `MjbDoubleSpan` (unsafe `double*` + length). The `IMjPhysicsBackend` interface and `MjCpuBackend` implementation use `double` throughout.
+
+4. **Batched simulation** -- step hundreds of environments in parallel using GCD `dispatch_apply` for reinforcement learning training.
 
 ## Architecture
 
@@ -22,31 +22,35 @@ com.mobyr.mujoco
 │   ├── Components/         # MjScene, MjBody, MjGeom, ... (from org.mujoco)
 │   ├── Bindings/
 │   │   ├── MjBindings.cs          # Original mj_* P/Invoke (backward compat)
-│   │   ├── MjbNativeMethods.cs    # mjb_* P/Invoke (unified backend API)
-│   │   └── MjbTypes.cs            # C# mirrors of mjb_types.h
+│   │   ├── MjbNativeMethods.cs    # mjaccess_* P/Invoke (accessor shim API)
+│   │   └── MjbTypes.cs            # MjbDoubleSpan, MjbFloatSpan, config structs
 │   ├── Wrappers/
-│   │   ├── MjbBackend.cs          # IDisposable wrapper for backend selection
-│   │   ├── MjbModel.cs            # Model handle with accessors
-│   │   ├── MjbData.cs             # Simulation state + stepping
+│   │   ├── MjbModel.cs            # Model handle with double-precision accessors
+│   │   ├── MjbData.cs             # Simulation state (double getters/setters)
 │   │   └── MjbBatchedSim.cs       # Vectorized multi-env simulation
+│   ├── Backend/
+│   │   ├── IMjPhysicsBackend.cs   # Physics interface (double throughout)
+│   │   ├── MjCpuBackend.cs        # CPU backend implementation
+│   │   └── BatchedPhysicsProxy.cs # Per-env slice into batched sim
 │   └── NativeLoader/
 │       └── MjbNativeLoader.cs     # dlopen preloader for native libs
+├── NativeShim/
+│   ├── mjaccess.c                 # Pure C accessor shim (~200 lines)
+│   └── mjaccess.h                 # Public API header
 ├── Plugins/
 │   └── macOS/arm64/
 │       ├── libmujoco.dylib        # MuJoCo C engine
-│       ├── libmjmlx.dylib         # MLX physics engine
-│       └── libmjb.dylib           # Unified backend API
+│       └── libmjaccess.dylib      # Accessor shim (pure C, ~40KB)
 └── Editor/                         # Scene authoring tools (from org.mujoco)
 ```
 
 ### Dependency graph
 
 ```
-MuJoCo MLX Unity (this package)
-  ├── libmjb.dylib  ──────── Unified C API (mjb_*)
-  │     ├── libmjmlx.dylib ── MLX Metal GPU physics
-  │     └── libmujoco.dylib ── MuJoCo C CPU physics
-  └── MjBindings.cs ───────── Original mj_* API (backward compat)
+mujoco-unity (this package)
+  ├── libmjaccess.dylib ── Pure C accessor shim (mjaccess_*)
+  │     └── libmujoco.dylib ── MuJoCo C physics engine
+  └── MjBindings.cs ──────── Original mj_* API (backward compat)
         └── libmujoco.dylib
 ```
 
@@ -74,32 +78,28 @@ Or use a local path during development:
 }
 ```
 
-### Using the mjb API
+### Using the API
 
 ```csharp
 using Mujoco.Mjb;
 
-// Create a GPU backend
-using var backend = MjbBackend.Create(MjbBackendType.MLX);
-
-// Load model
-using var model = backend.LoadModel("humanoid.xml");
+// Load model (static factory, no backend handle needed)
+using var model = MjbModel.Load("humanoid.xml");
 
 // Single environment
 using var data = model.MakeData();
-data.SetCtrl(actions);
+data.SetCtrl(new double[] { 0.1, 0.2, ... });
 data.Step();
-ReadOnlySpan<float> qpos = data.GetQpos();
+MjbDoubleSpan qpos = data.GetQpos();  // zero-copy double* into MuJoCo
 
-// Batched simulation (8192 environments on Metal GPU)
+// Batched simulation (128 environments on CPU, GCD parallel)
 var config = new MjbBatchedConfig {
-    numEnvs = 8192,
-    footContactsOnly = 1,
+    numEnvs = 128,
     solverIterations = 3
 };
 using var sim = model.CreateBatchedSim(config);
-sim.Step(batchedCtrl);  // ~73K SPS on Apple Silicon
-ReadOnlySpan<float> batchedQpos = sim.GetQpos();
+sim.Step(batchedCtrl);
+MjbDoubleSpan batchedQpos = sim.GetQpos();
 ```
 
 ### Using original MuJoCo components
@@ -122,19 +122,33 @@ This package includes fixes for Unity 6 that the upstream `org.mujoco` plugin ha
 - Null/readability checks for mesh generation
 - `PauseSimulation` and `ResetData` for RL training control
 
-## Performance
-
-| Metric | Value |
-|---|---|
-| Training SPS (8192 envs, MLX) | **73K** |
-| Gymnasium Humanoid-v5 reward | 1,102 (with full conformance) |
-| Physics features | Tendons, pyramidal friction, all collision geoms |
-
 ## Native library build
 
-See `Plugins/macOS/arm64/README.md` for build instructions.
+The accessor shim is built from source in `NativeShim/`:
 
-The native libraries are built from [MuJoCo-MLX-Cpp](https://github.com/arghyasur1991/MuJoCo-MLX-Cpp).
+```bash
+# Requires MuJoCo installed (e.g. via pip install mujoco)
+MUJOCO_DIR=$(python3 -c "import mujoco, os; print(os.path.dirname(mujoco.__file__))")
+
+cc -shared -O2 -fPIC \
+  -o libmjaccess.dylib \
+  NativeShim/mjaccess.c \
+  -I"$MUJOCO_DIR/include" \
+  -L"$MUJOCO_DIR/dylib" \
+  -lmujoco \
+  -install_name @loader_path/libmjaccess.dylib
+```
+
+Or use the project build system: `python build.py --mjaccess`
+
+See `Plugins/macOS/arm64/README.md` for more details.
+
+## Key design decisions
+
+- **Double precision throughout**: MuJoCo uses `double` internally. The C shim returns `double*` directly — no conversion buffers, no float32 truncation. `float` casts only happen at the Unity API boundary (Vector3/Quaternion) and neural network boundary (TorchSharp tensors).
+- **Zero-copy getters**: `mjaccess_get_qpos()` returns a pointer into `mjData.qpos` — no allocation, no memcpy.
+- **Thin C shim**: ~200 lines of pure C. MuJoCo exposes `mjModel`/`mjData` as C structs whose layout may change between versions; the shim provides stable accessor functions so C# doesn't need to mirror struct layouts.
+- **GCD batched stepping**: `dispatch_apply` for parallel `mj_step` across environments on macOS.
 
 ## License
 

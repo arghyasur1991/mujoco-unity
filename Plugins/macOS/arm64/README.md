@@ -1,20 +1,27 @@
 # Native Plugins (macOS arm64)
 
-Place the following dylibs here before running in Unity:
-
 | Library | Source | Purpose |
 |---|---|---|
-| `libmujoco.dylib` | [MuJoCo release](https://github.com/google-deepmind/mujoco/releases) | MuJoCo C physics engine |
-| `libmjmlx.dylib` | Build from [MuJoCo-MLX-Cpp](https://github.com/arghyasur1991/MuJoCo-MLX-Cpp) | MLX Metal GPU physics |
-| `libmjb.dylib` | Build from [MuJoCo-MLX-Cpp](https://github.com/arghyasur1991/MuJoCo-MLX-Cpp) | Unified backend API |
+| `libmujoco.dylib` | [MuJoCo](https://github.com/google-deepmind/mujoco/releases) or `pip install mujoco` | MuJoCo C physics engine |
+| `libmjaccess.dylib` | Built from `NativeShim/mjaccess.c` in this repo | Pure C accessor shim (double-precision getters/setters) |
 
 ## Build instructions
 
 ```bash
-cd MuJoCo-MLX-Cpp
-mkdir build && cd build
-cmake .. -DMUJOCO_ROOT=/path/to/mujoco -DMLX_ROOT=/path/to/mlx -DCMAKE_BUILD_TYPE=Release
-make -j mjmlx mjb
-cp libmjmlx.0.1.0.dylib /path/to/mujoco-unity/Plugins/macOS/arm64/libmjmlx.dylib
-cp libmjb.0.1.0.dylib /path/to/mujoco-unity/Plugins/macOS/arm64/libmjb.dylib
+# Find MuJoCo headers/libs from conda/pip installation
+MUJOCO_DIR=$(python3 -c "import mujoco, os; print(os.path.dirname(mujoco.__file__))")
+
+# Compile the accessor shim
+cc -shared -O2 -fPIC \
+  -o libmjaccess.dylib \
+  ../../NativeShim/mjaccess.c \
+  -I"$MUJOCO_DIR/include" \
+  -L"$MUJOCO_DIR/dylib" \
+  -lmujoco \
+  -install_name @loader_path/libmjaccess.dylib
+
+# Copy libmujoco from conda if not already present
+cp "$MUJOCO_DIR/dylib/libmujoco.3.2.7.dylib" libmujoco.dylib
 ```
+
+Or from the project root: `python build.py --mjaccess`
