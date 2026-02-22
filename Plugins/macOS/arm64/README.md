@@ -11,17 +11,16 @@
 # Find MuJoCo headers/libs from conda/pip installation
 MUJOCO_DIR=$(python3 -c "import mujoco, os; print(os.path.dirname(mujoco.__file__))")
 
-# Compile the accessor shim
+# Compile the accessor shim (link directly against the versioned dylib)
 cc -shared -O2 -fPIC \
   -o libmjaccess.dylib \
   ../../NativeShim/mjaccess.c \
   -I"$MUJOCO_DIR/include" \
-  -L"$MUJOCO_DIR/dylib" \
-  -lmujoco \
+  "$MUJOCO_DIR"/libmujoco.*.dylib \
   -install_name @loader_path/libmjaccess.dylib
 
 # Copy libmujoco from conda if not already present
-cp "$MUJOCO_DIR/dylib/libmujoco.3.2.7.dylib" libmujoco.dylib
+cp "$MUJOCO_DIR"/libmujoco.*.dylib libmujoco.dylib
 ```
 
 Or from the project root: `python build.py --mjaccess`
