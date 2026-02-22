@@ -28,8 +28,7 @@ namespace Mujoco {
     [Test]
     public void LoadingSceneFromAProvidedAsset() {
       var modelFile = Resources.Load<TextAsset>("ValidModel");
-      var backend = MjbBackend.Create(MjbBackendType.CPU);
-      var model = backend.LoadModelFromString(modelFile.text);
+      var model = MjbModel.LoadFromString(modelFile.text);
       Assert.That(model.Info.nbody, Is.EqualTo(3));
       model.Dispose();
     }

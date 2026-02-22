@@ -1,33 +1,11 @@
 // Copyright 2026 Arghya Sur / Mobyr
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Apache-2.0 License
 
+using System;
 using System.Runtime.InteropServices;
 
 namespace Mujoco.Mjb
 {
-    /// <summary>
-    /// Physics backend selection. Maps to MjbBackendType in mjb_types.h.
-    /// </summary>
-    public enum MjbBackendType : int
-    {
-        CPU = 0,
-        MLX = 1,
-    }
-
-    /// <summary>
-    /// Model dimensions returned by mjb_model_info. Maps to MjbModelInfo in mjb_types.h.
-    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct MjbModelInfo
     {
@@ -45,14 +23,97 @@ namespace Mujoco.Mjb
         public int neq;
     }
 
-    /// <summary>
-    /// Configuration for batched (vectorized) simulation. Maps to MjbBatchedConfig in mjb_types.h.
-    /// </summary>
     [StructLayout(LayoutKind.Sequential)]
     public struct MjbBatchedConfig
     {
         public int numEnvs;
-        public int footContactsOnly;
         public int solverIterations;
+    }
+
+    public unsafe struct MjbDoubleSpan
+    {
+        public readonly double* Data;
+        public readonly int Length;
+
+        public MjbDoubleSpan(double* data, int length)
+        {
+            Data = data;
+            Length = length;
+        }
+
+        public double this[int index]
+        {
+            get
+            {
+                if ((uint)index >= (uint)Length)
+                    throw new IndexOutOfRangeException();
+                return Data[index];
+            }
+        }
+
+        public double[] ToArray()
+        {
+            var arr = new double[Length];
+            for (int i = 0; i < Length; i++)
+                arr[i] = Data[i];
+            return arr;
+        }
+
+        public void CopyTo(double[] dest)
+        {
+            if (dest == null || Length == 0) return;
+            int n = Length < dest.Length ? Length : dest.Length;
+            fixed (double* p = dest)
+                Buffer.MemoryCopy(Data, p, (long)dest.Length * sizeof(double), (long)n * sizeof(double));
+        }
+
+        /// <summary>
+        /// Copy to a float[] buffer (for callers that still work in float, e.g. Unity transforms).
+        /// </summary>
+        public void CopyTo(float[] dest)
+        {
+            if (dest == null || Length == 0) return;
+            int n = Length < dest.Length ? Length : dest.Length;
+            for (int i = 0; i < n; i++)
+                dest[i] = (float)Data[i];
+        }
+    }
+
+    public unsafe struct MjbFloatSpan
+    {
+        public readonly float* Data;
+        public readonly int Length;
+
+        public MjbFloatSpan(float* data, int length)
+        {
+            Data = data;
+            Length = length;
+        }
+
+        public float this[int index]
+        {
+            get
+            {
+                if ((uint)index >= (uint)Length)
+                    throw new IndexOutOfRangeException();
+                return Data[index];
+            }
+        }
+
+        public float[] ToArray()
+        {
+            var arr = new float[Length];
+            for (int i = 0; i < Length; i++)
+                arr[i] = Data[i];
+            return arr;
+        }
+
+        public void CopyTo(float[] dest)
+        {
+            if (dest == null || Length == 0) return;
+            int n = Length < dest.Length ? Length : dest.Length;
+            fixed (float* p = dest)
+                Buffer.MemoryCopy(Data, p, (long)dest.Length * sizeof(float), (long)n * sizeof(float));
+        }
     }
 }

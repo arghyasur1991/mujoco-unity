@@ -1,16 +1,5 @@
 // Copyright 2026 Arghya Sur / Mobyr
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Apache-2.0 License
 
 using System;
 using System.Runtime.InteropServices;
@@ -18,10 +7,6 @@ using System.Text;
 
 namespace Mujoco.Mjb
 {
-    /// <summary>
-    /// Managed wrapper around a native MjbModel* handle.
-    /// Provides access to model dimensions, timestep, body masses, and name lookups.
-    /// </summary>
     public sealed class MjbModel : IDisposable
     {
         internal IntPtr Handle { get; private set; }
@@ -32,64 +17,80 @@ namespace Mujoco.Mjb
             Handle = handle;
         }
 
+        public static MjbModel Load(string xmlPath)
+        {
+            IntPtr h = MjbNativeMethods.mjaccess_load_model(xmlPath);
+            if (h == IntPtr.Zero)
+                throw new InvalidOperationException($"Failed to load model from {xmlPath}");
+            return new MjbModel(h);
+        }
+
+        public static MjbModel LoadFromString(string xmlString)
+        {
+            IntPtr h = MjbNativeMethods.mjaccess_load_model_from_string(xmlString);
+            if (h == IntPtr.Zero)
+                throw new InvalidOperationException("Failed to load model from XML string");
+            return new MjbModel(h);
+        }
+
         public MjbModelInfo Info
         {
             get
             {
                 ThrowIfDisposed();
-                return MjbNativeMethods.mjb_model_info(Handle);
+                return MjbNativeMethods.mjaccess_model_info(Handle);
             }
         }
 
-        public float Timestep
+        public double Timestep
         {
             get
             {
                 ThrowIfDisposed();
-                return MjbNativeMethods.mjb_model_opt_timestep(Handle);
+                return MjbNativeMethods.mjaccess_model_opt_timestep(Handle);
             }
             set
             {
                 ThrowIfDisposed();
-                MjbNativeMethods.mjb_model_set_opt_timestep(Handle, value);
+                MjbNativeMethods.mjaccess_model_set_opt_timestep(Handle, value);
             }
         }
 
-        public float BodyMass(int bodyId)
+        public double BodyMass(int bodyId)
         {
             ThrowIfDisposed();
-            return MjbNativeMethods.mjb_model_body_mass(Handle, bodyId);
+            return MjbNativeMethods.mjaccess_model_body_mass(Handle, bodyId);
         }
 
         public int Name2Id(int objType, string name)
         {
             ThrowIfDisposed();
-            return MjbNativeMethods.mjb_name2id(Handle, objType, name);
+            return MjbNativeMethods.mjaccess_name2id(Handle, objType, name);
         }
 
         public string Id2Name(int objType, int id)
         {
             ThrowIfDisposed();
-            IntPtr ptr = MjbNativeMethods.mjb_id2name(Handle, objType, id);
+            IntPtr ptr = MjbNativeMethods.mjaccess_id2name(Handle, objType, id);
             return ptr == IntPtr.Zero ? null : Marshal.PtrToStringAnsi(ptr);
         }
 
         public int JntQposAdr(int jntId)
         {
             ThrowIfDisposed();
-            return MjbNativeMethods.mjb_model_jnt_qposadr(Handle, jntId);
+            return MjbNativeMethods.mjaccess_model_jnt_qposadr(Handle, jntId);
         }
 
         public int JntDofAdr(int jntId)
         {
             ThrowIfDisposed();
-            return MjbNativeMethods.mjb_model_jnt_dofadr(Handle, jntId);
+            return MjbNativeMethods.mjaccess_model_jnt_dofadr(Handle, jntId);
         }
 
         public int JntType(int jntId)
         {
             ThrowIfDisposed();
-            return MjbNativeMethods.mjb_model_jnt_type(Handle, jntId);
+            return MjbNativeMethods.mjaccess_model_jnt_type(Handle, jntId);
         }
 
         public int Nconmax
@@ -97,48 +98,48 @@ namespace Mujoco.Mjb
             get
             {
                 ThrowIfDisposed();
-                return MjbNativeMethods.mjb_model_nconmax(Handle);
+                return MjbNativeMethods.mjaccess_model_nconmax(Handle);
             }
         }
 
         public int GeomType(int geomId)
         {
             ThrowIfDisposed();
-            return MjbNativeMethods.mjb_model_geom_type(Handle, geomId);
+            return MjbNativeMethods.mjaccess_model_geom_type(Handle, geomId);
         }
 
         public int SensorAdr(int sensorId)
         {
             ThrowIfDisposed();
-            return MjbNativeMethods.mjb_model_sensor_adr(Handle, sensorId);
+            return MjbNativeMethods.mjaccess_model_sensor_adr(Handle, sensorId);
         }
 
         public int BodyMocapId(int bodyId)
         {
             ThrowIfDisposed();
-            return MjbNativeMethods.mjb_model_body_mocapid(Handle, bodyId);
+            return MjbNativeMethods.mjaccess_model_body_mocapid(Handle, bodyId);
         }
 
-        public float TendonWidth(int tendonId)
+        public double TendonWidth(int tendonId)
         {
             ThrowIfDisposed();
-            return MjbNativeMethods.mjb_model_tendon_width(Handle, tendonId);
+            return MjbNativeMethods.mjaccess_model_tendon_width(Handle, tendonId);
         }
 
         public int HfieldAdr(int hfieldId)
         {
             ThrowIfDisposed();
-            return MjbNativeMethods.mjb_model_hfield_adr(Handle, hfieldId);
+            return MjbNativeMethods.mjaccess_model_hfield_adr(Handle, hfieldId);
         }
 
-        public unsafe MjbFloatSpan EqData
+        public unsafe MjbDoubleSpan EqData
         {
             get
             {
                 ThrowIfDisposed();
                 int n;
-                float* ptr = MjbNativeMethods.mjb_model_eq_data(Handle, &n);
-                return new MjbFloatSpan(ptr, n);
+                double* ptr = MjbNativeMethods.mjaccess_model_eq_data(Handle, &n);
+                return new MjbDoubleSpan(ptr, n);
             }
         }
 
@@ -148,78 +149,66 @@ namespace Mujoco.Mjb
             {
                 ThrowIfDisposed();
                 int n;
-                float* ptr = MjbNativeMethods.mjb_model_hfield_data(Handle, &n);
+                float* ptr = MjbNativeMethods.mjaccess_model_hfield_data(Handle, &n);
                 return new MjbFloatSpan(ptr, n);
             }
         }
 
-        public unsafe MjbFloatSpan GeomPos
+        public unsafe MjbDoubleSpan GeomPos
         {
             get
             {
                 ThrowIfDisposed();
                 int n;
-                float* ptr = MjbNativeMethods.mjb_model_geom_pos(Handle, &n);
-                return new MjbFloatSpan(ptr, n);
+                double* ptr = MjbNativeMethods.mjaccess_model_geom_pos(Handle, &n);
+                return new MjbDoubleSpan(ptr, n);
             }
         }
 
-        public unsafe MjbFloatSpan GeomQuat
+        public unsafe MjbDoubleSpan GeomQuat
         {
             get
             {
                 ThrowIfDisposed();
                 int n;
-                float* ptr = MjbNativeMethods.mjb_model_geom_quat(Handle, &n);
-                return new MjbFloatSpan(ptr, n);
+                double* ptr = MjbNativeMethods.mjaccess_model_geom_quat(Handle, &n);
+                return new MjbDoubleSpan(ptr, n);
             }
         }
 
-        /// <summary>
-        /// Save the compiled model to an XML file. Throws on error.
-        /// </summary>
         public void SaveLastXml(string path)
         {
             ThrowIfDisposed();
             var errorBuf = new StringBuilder(1024);
-            int result = MjbNativeMethods.mjb_save_last_xml(Handle, path, errorBuf, errorBuf.Capacity);
+            int result = MjbNativeMethods.mjaccess_save_last_xml(Handle, path, errorBuf, errorBuf.Capacity);
             if (result != 0)
                 throw new System.IO.IOException($"Error saving model: {errorBuf}");
         }
 
-        /// <summary>
-        /// Write values to model hfield_data starting at the given offset.
-        /// </summary>
         public unsafe void SetHfieldData(int offset, float[] values)
         {
             ThrowIfDisposed();
             fixed (float* p = values)
-                MjbNativeMethods.mjb_model_set_hfield_data(Handle, offset, p, values.Length);
+                MjbNativeMethods.mjaccess_model_set_hfield_data(Handle, offset, p, values.Length);
         }
 
-        /// <summary>
-        /// Load a MuJoCo plugin library (.so/.dylib).
-        /// </summary>
         public static void LoadPluginLibrary(string path)
         {
-            MjbNativeMethods.mjb_load_plugin_library(path);
+            MjbNativeMethods.mjaccess_load_plugin_library(path);
         }
 
-        /// <summary>
-        /// Compute 6D object velocity (3 rotational + 3 translational).
-        /// </summary>
         public unsafe void ObjectVelocity(MjbData data, int objtype, int objid,
-            int flgLocal, float[] result6)
+            int flgLocal, double[] result6)
         {
             ThrowIfDisposed();
-            fixed (float* p = result6)
-                MjbNativeMethods.mjb_object_velocity(Handle, data.Handle, objtype, objid, flgLocal, p);
+            fixed (double* p = result6)
+                MjbNativeMethods.mjaccess_object_velocity(Handle, data.Handle, objtype, objid, flgLocal, p);
         }
 
         public MjbData MakeData()
         {
             ThrowIfDisposed();
-            IntPtr h = MjbNativeMethods.mjb_make_data(Handle);
+            IntPtr h = MjbNativeMethods.mjaccess_make_data(Handle);
             if (h == IntPtr.Zero)
                 throw new InvalidOperationException("Failed to create MjbData");
             return new MjbData(h, this);
@@ -228,7 +217,7 @@ namespace Mujoco.Mjb
         public MjbBatchedSim CreateBatchedSim(MjbBatchedConfig config)
         {
             ThrowIfDisposed();
-            IntPtr h = MjbNativeMethods.mjb_batched_create(Handle, ref config);
+            IntPtr h = MjbNativeMethods.mjaccess_batched_create(Handle, ref config);
             if (h == IntPtr.Zero)
                 throw new InvalidOperationException("Failed to create MjbBatchedSim");
             return new MjbBatchedSim(h);
@@ -243,7 +232,7 @@ namespace Mujoco.Mjb
         {
             if (!_disposed && Handle != IntPtr.Zero)
             {
-                MjbNativeMethods.mjb_free_model(Handle);
+                MjbNativeMethods.mjaccess_free_model(Handle);
                 Handle = IntPtr.Zero;
                 _disposed = true;
             }

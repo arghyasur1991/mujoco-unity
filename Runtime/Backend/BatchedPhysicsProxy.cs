@@ -1,61 +1,31 @@
 // Copyright 2026 Arghya Sur / Mobyr
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Apache-2.0 License
 
 using System;
 using System.Runtime.InteropServices;
 
 namespace Mujoco.Mjb
 {
-    /// <summary>
-    /// IMjPhysicsBackend adapter that reads a single env's slice from a MjbBatchedSim.
-    ///
-    /// All getters return MjbFloatSpan pointing into the batched array at the correct
-    /// env offset — zero-copy pointer arithmetic, no per-env allocation.
-    ///
-    /// Simulation methods (Step, Forward, RnePostConstraint) are no-ops: the batched sim
-    /// handles stepping externally. SetQpos/SetQvel call per-env C API setters for resets.
-    ///
-    /// Model accessors delegate to the shared MjbModel.
-    /// </summary>
     public sealed unsafe class BatchedPhysicsProxy : IMjPhysicsBackend
     {
         private MjbBatchedSim _sim;
         private MjbModel _model;
         private readonly int _envIndex;
         private readonly int _nq, _nv, _nu, _nbody, _njnt, _ngeom;
-        private float* _ctrlPtr;
+        private double* _ctrlPtr;
         private bool _ownsCtrl;
         private bool _disposed;
 
-        /// <param name="sharedCtrlPtr">
-        /// If non-null, GetCtrl() returns a span over this pointer (zero-copy into shared
-        /// batched ctrl buffer). If null, allocates a local buffer (legacy path).
-        /// </param>
         public BatchedPhysicsProxy(MjbBatchedSim sim, int envIndex, MjbModel model,
-            float* sharedCtrlPtr = null)
+            double* sharedCtrlPtr = null)
         {
             _sim = sim ?? throw new ArgumentNullException(nameof(sim));
             _model = model ?? throw new ArgumentNullException(nameof(model));
             _envIndex = envIndex;
 
             var info = model.Info;
-            _nq = info.nq;
-            _nv = info.nv;
-            _nu = info.nu;
-            _nbody = info.nbody;
-            _njnt = info.njnt;
-            _ngeom = info.ngeom;
+            _nq = info.nq; _nv = info.nv; _nu = info.nu;
+            _nbody = info.nbody; _njnt = info.njnt; _ngeom = info.ngeom;
 
             if (sharedCtrlPtr != null)
             {
@@ -64,82 +34,71 @@ namespace Mujoco.Mjb
             }
             else
             {
-                _ctrlPtr = (float*)Marshal.AllocHGlobal(_nu * sizeof(float));
-                new Span<byte>(_ctrlPtr, _nu * sizeof(float)).Clear();
+                _ctrlPtr = (double*)Marshal.AllocHGlobal(_nu * sizeof(double));
+                new Span<byte>(_ctrlPtr, _nu * sizeof(double)).Clear();
                 _ownsCtrl = true;
             }
         }
 
-        // ── Model dimensions ────────────────────────────────────────────
         public int Nq => _nq;
         public int Nv => _nv;
         public int Nu => _nu;
         public int Nbody => _nbody;
         public int Njnt => _njnt;
         public int Ngeom => _ngeom;
-        public float Timestep { get => _model.Timestep; set => _model.Timestep = value; }
+        public double Timestep { get => _model.Timestep; set => _model.Timestep = value; }
         public int Nconmax => _model.Nconmax;
 
-        // ── Simulation (all no-ops — batched sim steps externally) ──────
         public void Step() { }
         public void Forward() { }
         public void ResetData() { }
         public void RnePostConstraint() { }
 
-        // ── State setters ───────────────────────────────────────────────
-
-        public void SetCtrl(float[] ctrl)
+        public void SetCtrl(double[] ctrl)
         {
             int n = Math.Min(ctrl.Length, _nu);
             for (int i = 0; i < n; i++) _ctrlPtr[i] = ctrl[i];
         }
 
-        public void SetCtrl(int index, float value)
+        public void SetCtrl(int index, double value)
         {
             if ((uint)index < (uint)_nu)
                 _ctrlPtr[index] = value;
         }
 
-        public void SetQpos(float[] qpos) => _sim.SetEnvQpos(_envIndex, qpos);
-        public void SetQvel(float[] qvel) => _sim.SetEnvQvel(_envIndex, qvel);
+        public void SetQpos(double[] qpos) => _sim.SetEnvQpos(_envIndex, qpos);
+        public void SetQvel(double[] qvel) => _sim.SetEnvQvel(_envIndex, qvel);
 
         public void SetQpos(int index, double value)
         {
-            // CPU backend: Get*() gathers N mjData into a temp buffer — writes here are lost.
-            // Use SetQpos(float[]) which goes through mjb_batched_set_env_qpos.
             throw new NotSupportedException(
-                "Per-index SetQpos not supported on batched proxy (writes to gather buffer, not mjData). " +
-                "Build a float[] and use SetQpos(float[]).");
+                "Per-index SetQpos not supported on batched proxy. " +
+                "Build a double[] and use SetQpos(double[]).");
         }
 
         public void SetQvel(int index, double value)
         {
             throw new NotSupportedException(
-                "Per-index SetQvel not supported on batched proxy (writes to gather buffer, not mjData). " +
-                "Build a float[] and use SetQvel(float[]).");
+                "Per-index SetQvel not supported on batched proxy. " +
+                "Build a double[] and use SetQvel(double[]).");
         }
 
-        // ── State getters ───────────────────────────────────────────────
-        // NOT cached: CPU backend gathers from N separate mjData* into a
-        // shared buffer on each Get*() call. Caching would freeze state.
+        public MjbDoubleSpan GetQpos() => Slice(_sim.GetQpos(), _envIndex * _nq, _nq);
+        public MjbDoubleSpan GetQvel() => Slice(_sim.GetQvel(), _envIndex * _nv, _nv);
+        public MjbDoubleSpan GetCtrl() => new MjbDoubleSpan(_ctrlPtr, _nu);
+        public MjbDoubleSpan GetXpos() => Slice(_sim.GetXpos(), _envIndex * _nbody * 3, _nbody * 3);
+        public MjbDoubleSpan GetXipos() => GetXpos();
+        public MjbDoubleSpan GetSubtreeCom() => Slice(_sim.GetSubtreeCom(), _envIndex * _nbody * 3, _nbody * 3);
+        public MjbDoubleSpan GetCinert() => Slice(_sim.GetCinert(), _envIndex * _nbody * 10, _nbody * 10);
+        public MjbDoubleSpan GetCvel() => Slice(_sim.GetCvel(), _envIndex * _nbody * 6, _nbody * 6);
+        public MjbDoubleSpan GetQfrcActuator() => Slice(_sim.GetQfrcActuator(), _envIndex * _nv, _nv);
+        public MjbDoubleSpan GetCfrcExt() => Slice(_sim.GetCfrcExt(), _envIndex * _nbody * 6, _nbody * 6);
 
-        public MjbFloatSpan GetQpos() => Slice(_sim.GetQpos(), _envIndex * _nq, _nq);
-        public MjbFloatSpan GetQvel() => Slice(_sim.GetQvel(), _envIndex * _nv, _nv);
-        public MjbFloatSpan GetCtrl() => new MjbFloatSpan(_ctrlPtr, _nu);
-        public MjbFloatSpan GetXpos() => Slice(_sim.GetXpos(), _envIndex * _nbody * 3, _nbody * 3);
-        public MjbFloatSpan GetXipos() => GetXpos();
-        public MjbFloatSpan GetSubtreeCom() => Slice(_sim.GetSubtreeCom(), _envIndex * _nbody * 3, _nbody * 3);
-        public MjbFloatSpan GetCinert() => Slice(_sim.GetCinert(), _envIndex * _nbody * 10, _nbody * 10);
-        public MjbFloatSpan GetCvel() => Slice(_sim.GetCvel(), _envIndex * _nbody * 6, _nbody * 6);
-        public MjbFloatSpan GetQfrcActuator() => Slice(_sim.GetQfrcActuator(), _envIndex * _nv, _nv);
-        public MjbFloatSpan GetCfrcExt() => Slice(_sim.GetCfrcExt(), _envIndex * _nbody * 6, _nbody * 6);
+        public MjbDoubleSpan GetGeomXpos() => default;
+        public MjbDoubleSpan GetGeomXmat() => default;
+        public MjbDoubleSpan GetSensordata() => default;
 
-        public MjbFloatSpan GetGeomXpos() => default;
-        public MjbFloatSpan GetGeomXmat() => default;
-        public MjbFloatSpan GetSensordata() => default;
-
-        // ── Model accessors ─────────────────────────────────────────────
-        public float BodyMass(int bodyId) => _model.BodyMass(bodyId);
+        public double BodyMass(int bodyId) => _model.BodyMass(bodyId);
         public int Name2Id(int objType, string name) => _model.Name2Id(objType, name);
         public string Id2Name(int objType, int id) => _model.Id2Name(objType, id);
         public int JntQposAdr(int jntId) => _model.JntQposAdr(jntId);
@@ -147,12 +106,10 @@ namespace Mujoco.Mjb
         public int JntType(int jntId) => _model.JntType(jntId);
         public int GeomType(int geomId) => _model.GeomType(geomId);
 
-        // ── Helpers ─────────────────────────────────────────────────────
-
-        private static MjbFloatSpan Slice(MjbFloatSpan full, int offset, int length)
+        private static MjbDoubleSpan Slice(MjbDoubleSpan full, int offset, int length)
         {
             if (full.Data == null) return default;
-            return new MjbFloatSpan(full.Data + offset, length);
+            return new MjbDoubleSpan(full.Data + offset, length);
         }
 
         public void Dispose()
@@ -160,9 +117,7 @@ namespace Mujoco.Mjb
             if (_disposed) return;
             _disposed = true;
             if (_ownsCtrl && _ctrlPtr != null)
-            {
                 Marshal.FreeHGlobal((IntPtr)_ctrlPtr);
-            }
             _ctrlPtr = null;
             _sim = null;
             _model = null;

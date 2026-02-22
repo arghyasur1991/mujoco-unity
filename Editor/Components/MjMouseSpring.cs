@@ -158,12 +158,12 @@ namespace Mujoco {
             // Raycast towards the drag plane to update _mouseDragCurrentPoint.
             UpdatePositionOnDragPlane(currentEvent.mousePosition);
 
-            float[] mjBodyVel = new float[6];
+            double[] mjBodyVel = new double[6];
             scene.Model.ObjectVelocity(
                 scene.Data, (int)mjtObj.mjOBJ_BODY, body.MujocoId, 0, mjBodyVel);
             // linear velocity is in the last 3 entries
             Vector3 bodyVel = MjEngineTool.UnityVector3(
-                new Vector3(mjBodyVel[3], mjBodyVel[4], mjBodyVel[5]));
+                new Vector3((float)mjBodyVel[3], (float)mjBodyVel[4], (float)mjBodyVel[5]));
 
             float springStiffness = 100;
             var settings = MjGlobalSettings.Instance;
@@ -172,7 +172,7 @@ namespace Mujoco {
             }
 
             Vector3 delta = _mouseDragCurrentPoint - bodyPosition;
-            float mass = scene.Model.BodyMass(body.MujocoId);
+            float mass = (float)scene.Model.BodyMass(body.MujocoId);
             Vector3 unityForce = delta * springStiffness * mass;
             unityForce -= bodyVel * Mathf.Sqrt(springStiffness) * mass;
             Vector3 mjForce = MjEngineTool.MjVector3(unityForce);

@@ -1,74 +1,10 @@
 // Copyright 2026 Arghya Sur / Mobyr
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
+// Apache-2.0 License
 
 using System;
 
 namespace Mujoco.Mjb
 {
-    /// <summary>
-    /// A pointer + length pair for zero-copy access to native float arrays.
-    /// The pointer is valid only while the owning MjbData/MjbBatchedSim is alive.
-    /// </summary>
-    public unsafe struct MjbFloatSpan
-    {
-        public readonly float* Data;
-        public readonly int Length;
-
-        public MjbFloatSpan(float* data, int length)
-        {
-            Data = data;
-            Length = length;
-        }
-
-        public float this[int index]
-        {
-            get
-            {
-                if ((uint)index >= (uint)Length)
-                    throw new IndexOutOfRangeException();
-                return Data[index];
-            }
-        }
-
-        /// <summary>
-        /// Copy to a managed array. Use when you need the data to outlive the native buffer.
-        /// </summary>
-        public float[] ToArray()
-        {
-            var arr = new float[Length];
-            for (int i = 0; i < Length; i++)
-                arr[i] = Data[i];
-            return arr;
-        }
-
-        /// <summary>
-        /// Copy into a pre-allocated buffer. Zero allocation — use for hot paths.
-        /// Copies min(Length, dest.Length) elements.
-        /// </summary>
-        public unsafe void CopyTo(float[] dest)
-        {
-            if (dest == null || Length == 0) return;
-            int n = Length < dest.Length ? Length : dest.Length;
-            fixed (float* p = dest)
-                Buffer.MemoryCopy(Data, p, (long)dest.Length * sizeof(float), (long)n * sizeof(float));
-        }
-    }
-
-    /// <summary>
-    /// Managed wrapper around a native MjbData* handle.
-    /// Provides simulation stepping and state access (all float*).
-    /// </summary>
     public sealed class MjbData : IDisposable
     {
         internal IntPtr Handle { get; private set; }
@@ -86,271 +22,269 @@ namespace Mujoco.Mjb
         public void Step()
         {
             ThrowIfDisposed();
-            MjbNativeMethods.mjb_step(_model.Handle, Handle);
+            MjbNativeMethods.mjaccess_step(_model.Handle, Handle);
         }
 
         public void Forward()
         {
             ThrowIfDisposed();
-            MjbNativeMethods.mjb_forward(_model.Handle, Handle);
+            MjbNativeMethods.mjaccess_forward(_model.Handle, Handle);
         }
 
         public void Step1()
         {
             ThrowIfDisposed();
-            MjbNativeMethods.mjb_step1(_model.Handle, Handle);
+            MjbNativeMethods.mjaccess_step1(_model.Handle, Handle);
         }
 
         public void Step2()
         {
             ThrowIfDisposed();
-            MjbNativeMethods.mjb_step2(_model.Handle, Handle);
+            MjbNativeMethods.mjaccess_step2(_model.Handle, Handle);
         }
 
         public void Kinematics()
         {
             ThrowIfDisposed();
-            MjbNativeMethods.mjb_kinematics(_model.Handle, Handle);
+            MjbNativeMethods.mjaccess_kinematics(_model.Handle, Handle);
         }
 
         public void ResetData()
         {
             ThrowIfDisposed();
-            MjbNativeMethods.mjb_reset_data(_model.Handle, Handle);
+            MjbNativeMethods.mjaccess_reset_data(_model.Handle, Handle);
         }
 
         public void RnePostConstraint()
         {
             ThrowIfDisposed();
-            MjbNativeMethods.mjb_rne_post_constraint(_model.Handle, Handle);
+            MjbNativeMethods.mjaccess_rne_post_constraint(_model.Handle, Handle);
         }
 
         // ── State setters ───────────────────────────────────────────
 
-        public unsafe void SetQpos(float[] qpos)
+        public unsafe void SetQpos(double[] qpos)
         {
             ThrowIfDisposed();
-            fixed (float* p = qpos)
-                MjbNativeMethods.mjb_set_qpos(Handle, p, qpos.Length);
+            fixed (double* p = qpos)
+                MjbNativeMethods.mjaccess_set_qpos(Handle, p, qpos.Length);
         }
 
-        public unsafe void SetQvel(float[] qvel)
+        public unsafe void SetQvel(double[] qvel)
         {
             ThrowIfDisposed();
-            fixed (float* p = qvel)
-                MjbNativeMethods.mjb_set_qvel(Handle, p, qvel.Length);
+            fixed (double* p = qvel)
+                MjbNativeMethods.mjaccess_set_qvel(Handle, p, qvel.Length);
         }
 
-        public unsafe void SetCtrl(float[] ctrl)
+        public unsafe void SetCtrl(double[] ctrl)
         {
             ThrowIfDisposed();
-            fixed (float* p = ctrl)
-                MjbNativeMethods.mjb_set_ctrl(Handle, p, ctrl.Length);
+            fixed (double* p = ctrl)
+                MjbNativeMethods.mjaccess_set_ctrl(Handle, p, ctrl.Length);
         }
 
-        // ── State getters (zero-copy pointer into native memory) ────
+        // ── State getters (zero-copy double* into MuJoCo arrays) ────
 
-        public unsafe MjbFloatSpan GetQpos()
+        public unsafe MjbDoubleSpan GetQpos()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_qpos(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_qpos(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetQvel()
+        public unsafe MjbDoubleSpan GetQvel()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_qvel(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_qvel(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetCtrl()
+        public unsafe MjbDoubleSpan GetCtrl()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_ctrl(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_ctrl(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetXpos()
+        public unsafe MjbDoubleSpan GetXpos()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_xpos(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_xpos(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetXquat()
+        public unsafe MjbDoubleSpan GetXquat()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_xquat(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_xquat(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetXipos()
+        public unsafe MjbDoubleSpan GetXipos()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_xipos(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_xipos(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetCvel()
+        public unsafe MjbDoubleSpan GetCvel()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_cvel(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_cvel(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetQfrcActuator()
+        public unsafe MjbDoubleSpan GetQfrcActuator()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_qfrc_actuator(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_qfrc_actuator(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetSubtreeCom()
+        public unsafe MjbDoubleSpan GetSubtreeCom()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_subtree_com(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_subtree_com(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetCinert()
+        public unsafe MjbDoubleSpan GetCinert()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_cinert(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_cinert(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetCfrcExt()
+        public unsafe MjbDoubleSpan GetCfrcExt()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_cfrc_ext(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_cfrc_ext(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetGeomXpos()
+        public unsafe MjbDoubleSpan GetGeomXpos()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_geom_xpos(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_geom_xpos(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetGeomXmat()
+        public unsafe MjbDoubleSpan GetGeomXmat()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_geom_xmat(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_geom_xmat(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetSensordata()
+        public unsafe MjbDoubleSpan GetSensordata()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_sensordata(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_sensordata(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
         // ── Additional data getters for component binding ────────────
 
-        public unsafe MjbFloatSpan GetXaxis()
+        public unsafe MjbDoubleSpan GetXaxis()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_xaxis(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_xaxis(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetSiteXpos()
+        public unsafe MjbDoubleSpan GetSiteXpos()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_site_xpos(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_site_xpos(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetSiteXmat()
+        public unsafe MjbDoubleSpan GetSiteXmat()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_site_xmat(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_site_xmat(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetActuatorLength()
+        public unsafe MjbDoubleSpan GetActuatorLength()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_actuator_length(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_actuator_length(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetActuatorVelocity()
+        public unsafe MjbDoubleSpan GetActuatorVelocity()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_actuator_velocity(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_actuator_velocity(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetActuatorForce()
+        public unsafe MjbDoubleSpan GetActuatorForce()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_actuator_force(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_actuator_force(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetMocapPos()
+        public unsafe MjbDoubleSpan GetMocapPos()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_mocap_pos(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_mocap_pos(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetMocapQuat()
+        public unsafe MjbDoubleSpan GetMocapQuat()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_mocap_quat(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_mocap_quat(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetTenLength()
+        public unsafe MjbDoubleSpan GetTenLength()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_ten_length(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_ten_length(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe MjbFloatSpan GetWrapXpos()
+        public unsafe MjbDoubleSpan GetWrapXpos()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_wrap_xpos(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_wrap_xpos(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
-
-        // Int data getters return raw pointers (tendon wrapping)
 
         public unsafe void GetTenWrapadr(out int* data, out int length)
         {
             ThrowIfDisposed();
             int n;
-            data = MjbNativeMethods.mjb_get_ten_wrapadr(Handle, &n);
+            data = MjbNativeMethods.mjaccess_get_ten_wrapadr(Handle, &n);
             length = n;
         }
 
@@ -358,7 +292,7 @@ namespace Mujoco.Mjb
         {
             ThrowIfDisposed();
             int n;
-            data = MjbNativeMethods.mjb_get_ten_wrapnum(Handle, &n);
+            data = MjbNativeMethods.mjaccess_get_ten_wrapnum(Handle, &n);
             length = n;
         }
 
@@ -366,82 +300,69 @@ namespace Mujoco.Mjb
         {
             ThrowIfDisposed();
             int n;
-            data = MjbNativeMethods.mjb_get_wrap_obj(Handle, &n);
+            data = MjbNativeMethods.mjaccess_get_wrap_obj(Handle, &n);
             length = n;
         }
 
         // ── Per-index state setters ─────────────────────────────────
 
-        public void SetQposAt(int index, float value)
+        public void SetQposAt(int index, double value)
         {
             ThrowIfDisposed();
-            MjbNativeMethods.mjb_set_qpos_at(Handle, index, value);
+            MjbNativeMethods.mjaccess_set_qpos_at(Handle, index, value);
         }
 
-        public void SetQvelAt(int index, float value)
+        public void SetQvelAt(int index, double value)
         {
             ThrowIfDisposed();
-            MjbNativeMethods.mjb_set_qvel_at(Handle, index, value);
+            MjbNativeMethods.mjaccess_set_qvel_at(Handle, index, value);
         }
 
-        public void SetCtrlAt(int index, float value)
+        public void SetCtrlAt(int index, double value)
         {
             ThrowIfDisposed();
-            MjbNativeMethods.mjb_set_ctrl_at(Handle, index, value);
+            MjbNativeMethods.mjaccess_set_ctrl_at(Handle, index, value);
         }
 
         // ── xfrc_applied ────────────────────────────────────────────
 
-        public unsafe MjbFloatSpan GetXfrcApplied()
+        public unsafe MjbDoubleSpan GetXfrcApplied()
         {
             ThrowIfDisposed();
             int n;
-            float* ptr = MjbNativeMethods.mjb_get_xfrc_applied(Handle, &n);
-            return new MjbFloatSpan(ptr, n);
+            double* ptr = MjbNativeMethods.mjaccess_get_xfrc_applied(Handle, &n);
+            return new MjbDoubleSpan(ptr, n);
         }
 
-        public unsafe void SetXfrcApplied(float[] values)
+        public unsafe void SetXfrcApplied(double[] values)
         {
             ThrowIfDisposed();
-            fixed (float* p = values)
-                MjbNativeMethods.mjb_set_xfrc_applied(Handle, p, values.Length);
+            fixed (double* p = values)
+                MjbNativeMethods.mjaccess_set_xfrc_applied(Handle, p, values.Length);
         }
 
-        // ── Warnings / diagnostics ──────────────────────────────────
+        // ── Warnings ────────────────────────────────────────────────
 
         public int GetWarningCount(int index)
         {
             ThrowIfDisposed();
-            return MjbNativeMethods.mjb_get_warning_count(Handle, index);
+            return MjbNativeMethods.mjaccess_get_warning_count(Handle, index);
         }
 
         // ── Mocap setters ────────────────────────────────────────────
 
-        public unsafe void SetMocapPos(float[] pos)
+        public unsafe void SetMocapPos(double[] pos)
         {
             ThrowIfDisposed();
-            fixed (float* p = pos)
-                MjbNativeMethods.mjb_set_mocap_pos(Handle, p, pos.Length);
+            fixed (double* p = pos)
+                MjbNativeMethods.mjaccess_set_mocap_pos(Handle, p, pos.Length);
         }
 
-        public unsafe void SetMocapQuat(float[] quat)
+        public unsafe void SetMocapQuat(double[] quat)
         {
             ThrowIfDisposed();
-            fixed (float* p = quat)
-                MjbNativeMethods.mjb_set_mocap_quat(Handle, p, quat.Length);
-        }
-
-        // ── Differentiable simulation ───────────────────────────────
-
-        /// <summary>
-        /// Compute d(next_state)/d(ctrl). MLX backend only.
-        /// Returns false if the backend doesn't support differentiation.
-        /// </summary>
-        public unsafe bool GradStep(float[] gradOut)
-        {
-            ThrowIfDisposed();
-            fixed (float* p = gradOut)
-                return MjbNativeMethods.mjb_grad_step(_model.Handle, Handle, p) == 0;
+            fixed (double* p = quat)
+                MjbNativeMethods.mjaccess_set_mocap_quat(Handle, p, quat.Length);
         }
 
         private void ThrowIfDisposed()
@@ -453,7 +374,7 @@ namespace Mujoco.Mjb
         {
             if (!_disposed && Handle != IntPtr.Zero)
             {
-                MjbNativeMethods.mjb_free_data(Handle);
+                MjbNativeMethods.mjaccess_free_data(Handle);
                 Handle = IntPtr.Zero;
                 _disposed = true;
             }

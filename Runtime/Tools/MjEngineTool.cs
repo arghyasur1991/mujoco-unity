@@ -39,28 +39,28 @@ public static class MjEngineTool {
 
   // ── Model I/O via mjb ──────────────────────────────────────────────────
 
-  public static MjbModel LoadModel(MjbBackend backend, string xmlPath) {
-    return backend.LoadModel(xmlPath);
+  public static MjbModel LoadModel(string xmlPath) {
+    return MjbModel.Load(xmlPath);
   }
 
-  public static MjbModel LoadModelFromString(MjbBackend backend, string contents) {
-    return backend.LoadModelFromString(contents);
+  public static MjbModel LoadModelFromString(string contents) {
+    return MjbModel.LoadFromString(contents);
   }
 
   public static void SaveModelToFile(string fileName, MjbModel model) {
     model.SaveLastXml(fileName);
   }
 
-  // ── Float-pointer helpers (mjb API returns float*) ─────────────────────
+  // ── Double-pointer helpers (mjb API returns double*) ────────────────────
 
-  public static unsafe void SetMjVector3(float* mjTarget, Vector3 unityVec) {
+  public static unsafe void SetMjVector3(double* mjTarget, Vector3 unityVec) {
     var mjVec = MjVector3(unityVec);
     mjTarget[0] = mjVec[0];
     mjTarget[1] = mjVec[1];
     mjTarget[2] = mjVec[2];
   }
 
-  public static unsafe void SetMjQuaternion(float* mjTarget, Quaternion unityQuat) {
+  public static unsafe void SetMjQuaternion(double* mjTarget, Quaternion unityQuat) {
     var mjQuat = MjQuaternion(unityQuat);
     mjTarget[0] = mjQuat.w;
     mjTarget[1] = mjQuat.x;
@@ -69,7 +69,7 @@ public static class MjEngineTool {
   }
 
   public static unsafe void SetMjTransform(
-      float* mjTarget, Vector3 unityVec, Quaternion unityQuat) {
+      double* mjTarget, Vector3 unityVec, Quaternion unityQuat) {
     var mjVec = MjVector3(unityVec);
     var mjQuat = MjQuaternion(unityQuat);
     mjTarget[0] = mjVec[0];
@@ -81,44 +81,44 @@ public static class MjEngineTool {
     mjTarget[6] = mjQuat.z;
   }
 
-  public static unsafe Vector3 UnityVector3(float* mjVector) {
-    return new Vector3(mjVector[0], mjVector[2], mjVector[1]);
+  public static unsafe Vector3 UnityVector3(double* mjVector) {
+    return new Vector3((float)mjVector[0], (float)mjVector[2], (float)mjVector[1]);
   }
 
-  public static unsafe Quaternion UnityQuaternion(float* mjQuat) {
+  public static unsafe Quaternion UnityQuaternion(double* mjQuat) {
     return new Quaternion(
-        x:mjQuat[1], y:mjQuat[3], z:mjQuat[2], w:-mjQuat[0]);
+        x:(float)mjQuat[1], y:(float)mjQuat[3], z:(float)mjQuat[2], w:(float)(-mjQuat[0]));
   }
 
-  // ── Span-based helpers (for MjbFloatSpan arrays from mjb getters) ──────
+  // ── Span-based helpers (for MjbDoubleSpan arrays from mjb getters) ─────
 
-  public static unsafe Vector3 UnityVector3AtEntry(MjbFloatSpan span, int entryIndex) {
-    float* p = span.Data + entryIndex * _elementsPerPosition;
-    return new Vector3(p[0], p[2], p[1]);
+  public static unsafe Vector3 UnityVector3AtEntry(MjbDoubleSpan span, int entryIndex) {
+    double* p = span.Data + entryIndex * _elementsPerPosition;
+    return new Vector3((float)p[0], (float)p[2], (float)p[1]);
   }
 
-  public static unsafe Quaternion UnityQuaternionAtEntry(MjbFloatSpan span, int entryIndex) {
-    float* p = span.Data + entryIndex * _elementsPerRotation;
-    return new Quaternion(x:p[1], y:p[3], z:p[2], w:-p[0]);
+  public static unsafe Quaternion UnityQuaternionAtEntry(MjbDoubleSpan span, int entryIndex) {
+    double* p = span.Data + entryIndex * _elementsPerRotation;
+    return new Quaternion(x:(float)p[1], y:(float)p[3], z:(float)p[2], w:(float)(-p[0]));
   }
 
-  public static unsafe Quaternion UnityQuaternionFromMatrixAtEntry(MjbFloatSpan span, int entryIndex) {
-    float* p = span.Data + entryIndex * 9;
+  public static unsafe Quaternion UnityQuaternionFromMatrixAtEntry(MjbDoubleSpan span, int entryIndex) {
+    double* p = span.Data + entryIndex * 9;
     return UnityQuaternionFromMatrix(p);
   }
 
-  public static unsafe void SetMjVector3AtEntry(MjbFloatSpan span, int entryIndex, Vector3 unityVec) {
-    float* p = span.Data + entryIndex * _elementsPerPosition;
+  public static unsafe void SetMjVector3AtEntry(MjbDoubleSpan span, int entryIndex, Vector3 unityVec) {
+    double* p = span.Data + entryIndex * _elementsPerPosition;
     SetMjVector3(p, unityVec);
   }
 
-  public static unsafe void SetMjQuaternionAtEntry(MjbFloatSpan span, int entryIndex, Quaternion unityQuat) {
-    float* p = span.Data + entryIndex * _elementsPerRotation;
+  public static unsafe void SetMjQuaternionAtEntry(MjbDoubleSpan span, int entryIndex, Quaternion unityQuat) {
+    double* p = span.Data + entryIndex * _elementsPerRotation;
     SetMjQuaternion(p, unityQuat);
   }
 
-  public static unsafe void SetMjTransformAtEntry(MjbFloatSpan span, int entryIndex, Vector3 unityVec, Quaternion unityQuat) {
-    float* p = span.Data + entryIndex * _elementsPerEquality;
+  public static unsafe void SetMjTransformAtEntry(MjbDoubleSpan span, int entryIndex, Vector3 unityVec, Quaternion unityQuat) {
+    double* p = span.Data + entryIndex * _elementsPerEquality;
     SetMjTransform(p, unityVec, unityQuat);
   }
 
