@@ -67,7 +67,7 @@ public class MjSceneGenerationTests {
   [Test]
   public void PhysicsRuntimeError() {
     _scene.CreateScene();
-    _scene.Data.GetQpos()[0] = float.PositiveInfinity;
+    _scene.Data.SetQposAt(0, double.PositiveInfinity);
     Assert.That(
         () => { _scene.StepScene(); },
         Throws.TypeOf<PhysicsRuntimeException>()
@@ -122,7 +122,7 @@ public class MjSceneGenerationTests {
   [Test]
   public void SceneRecreatedWithAddition() {
     _scene.CreateScene();
-    _scene.Data.GetQvel()[0] = 1;
+    _scene.Data.SetQvelAt(0, 1);
     var nq = _scene.Model.Info.nq;
     var tickedRotation = _body.transform.rotation;
     var body = new GameObject("body").AddComponent<MjBody>();
@@ -147,8 +147,8 @@ public class MjSceneGenerationTests {
     var joint = new GameObject("joint").AddComponent<MjHingeJoint>();
     joint.transform.parent = body.transform;
     _scene.CreateScene();
-    _scene.Data.GetQvel()[0] = 1;
-    _scene.Data.GetQvel()[1] = 2;
+    _scene.Data.SetQvelAt(0, 1);
+    _scene.Data.SetQvelAt(1, 2);
     var nq = _scene.Model.Info.nq;
     UnityEngine.Object.DestroyImmediate(inertia.gameObject);
     UnityEngine.Object.DestroyImmediate(joint.gameObject);

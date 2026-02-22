@@ -60,7 +60,7 @@ public abstract class MjBaseTendon : MjComponent {
 
   // Synchronize the state of the component.
   public override void OnSyncState(MjbData data) {
-    Length = data.GetTenLength()[MujocoId];
+    Length = (float)data.GetTenLength()[MujocoId];
   }
 }
 }

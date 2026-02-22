@@ -129,7 +129,7 @@ public class MjSpatialTendon : MjBaseTendon {
       int* wrapObj; int wrapObjLen;
       d.GetWrapObj(out wrapObj, out wrapObjLen);
       var wrapXpos = d.GetWrapXpos();
-      float tenWidth = m.TendonWidth(i);
+      float tenWidth = (float)m.TendonWidth(i);
 
       int start = tenWrapadr[i];
       int count = tenWrapnum[i];

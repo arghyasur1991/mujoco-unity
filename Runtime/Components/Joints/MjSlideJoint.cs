@@ -51,8 +51,8 @@ namespace Mujoco {
     }
 
     public override void OnSyncState(MjbData data) {
-      Configuration = data.GetQpos()[QposAddress];
-      Velocity = data.GetQvel()[DofAddress];
+      Configuration = (float)data.GetQpos()[QposAddress];
+      Velocity = (float)data.GetQvel()[DofAddress];
     }
 
     protected override void OnParseMjcf(XmlElement mjcf) {

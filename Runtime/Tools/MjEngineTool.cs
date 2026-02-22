@@ -90,6 +90,18 @@ public static class MjEngineTool {
         x:(float)mjQuat[1], y:(float)mjQuat[3], z:(float)mjQuat[2], w:(float)(-mjQuat[0]));
   }
 
+  // ── Raw double* entry helpers (for test round-trips and manual pointer math) ─
+
+  public static unsafe Vector3 MjVector3AtEntry(double* ptr, int entryIndex) {
+    double* p = ptr + entryIndex * _elementsPerPosition;
+    return new Vector3((float)p[0], (float)p[1], (float)p[2]);
+  }
+
+  public static unsafe Quaternion MjQuaternionAtEntry(double* ptr, int entryIndex) {
+    double* p = ptr + entryIndex * _elementsPerRotation;
+    return new Quaternion(w:(float)p[0], x:(float)p[1], y:(float)p[2], z:(float)p[3]);
+  }
+
   // ── Span-based helpers (for MjbDoubleSpan arrays from mjb getters) ─────
 
   public static unsafe Vector3 UnityVector3AtEntry(MjbDoubleSpan span, int entryIndex) {
@@ -124,12 +136,12 @@ public static class MjEngineTool {
 
   // ── Mat2Quat (Shepperd's method, replaces mju_mat2Quat) ──────────────
 
-  public static unsafe Quaternion UnityQuaternionFromMatrix(float* mat) {
+  public static unsafe Quaternion UnityQuaternionFromMatrix(double* mat) {
     // Shepperd's method: convert 3x3 row-major rotation matrix to quaternion.
     // mat layout: [m00 m01 m02 m10 m11 m12 m20 m21 m22]
-    float m00 = mat[0], m01 = mat[1], m02 = mat[2];
-    float m10 = mat[3], m11 = mat[4], m12 = mat[5];
-    float m20 = mat[6], m21 = mat[7], m22 = mat[8];
+    float m00 = (float)mat[0], m01 = (float)mat[1], m02 = (float)mat[2];
+    float m10 = (float)mat[3], m11 = (float)mat[4], m12 = (float)mat[5];
+    float m20 = (float)mat[6], m21 = (float)mat[7], m22 = (float)mat[8];
 
     float trace = m00 + m11 + m22;
     float w, x, y, z;

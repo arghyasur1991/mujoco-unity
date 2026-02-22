@@ -56,7 +56,7 @@ namespace Mujoco {
       RawConfiguration = data.GetQpos()[QposAddress];
       var qpos = (float)RawConfiguration;
       Configuration = (qpos % (2 * Mathf.PI)) * Mathf.Rad2Deg;
-      Velocity = data.GetQvel()[DofAddress];
+      Velocity = (float)data.GetQvel()[DofAddress];
     }
 
     protected override void OnParseMjcf(XmlElement mjcf) {

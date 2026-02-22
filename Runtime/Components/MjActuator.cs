@@ -388,9 +388,9 @@ public class MjActuator : MjComponent {
   // Synchronize the state of the component.
   public override void OnSyncState(MjbData data) {
     data.SetCtrlAt(MujocoId, Control);
-    Length = data.GetActuatorLength()[MujocoId];
-    Velocity = data.GetActuatorVelocity()[MujocoId];
-    Force = data.GetActuatorForce()[MujocoId];
+    Length = (float)data.GetActuatorLength()[MujocoId];
+    Velocity = (float)data.GetActuatorVelocity()[MujocoId];
+    Force = (float)data.GetActuatorForce()[MujocoId];
   }
 
   public void OnValidate() {
