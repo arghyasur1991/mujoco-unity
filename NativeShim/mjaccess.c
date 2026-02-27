@@ -7,7 +7,9 @@
 
 #include "mjaccess.h"
 #include <mujoco/mujoco.h>
+#ifdef __APPLE__
 #include <dispatch/dispatch.h>
+#endif
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -444,6 +446,7 @@ MJA_API void mjaccess_batched_step(MjAccessBatchedSim* sim, const double* ctrl) 
     int ne = sim->num_envs;
     int nu = m->nu;
 
+#ifdef __APPLE__
     dispatch_apply((size_t)ne,
         dispatch_get_global_queue(QOS_CLASS_USER_INTERACTIVE, 0),
         ^(size_t i) {
@@ -452,6 +455,13 @@ MJA_API void mjaccess_batched_step(MjAccessBatchedSim* sim, const double* ctrl) 
             mj_step(m, d);
         }
     );
+#else
+    for (int i = 0; i < ne; i++) {
+        mjData* d = sim->datas[i];
+        memcpy(d->ctrl, ctrl + i * nu, nu * sizeof(double));
+        mj_step(m, d);
+    }
+#endif
 }
 
 MJA_API void mjaccess_batched_reset(MjAccessBatchedSim* sim, const int* reset_mask) {
